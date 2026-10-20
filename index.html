@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>資産ターミナル</title>
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="資産">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* layout: one-screen terminal. amber title bar, scrolling ledger, five function-key tabs at the bottom */
+:root{--bg:#000000;--panel:#0d0c09;--bar:#211e17;--line:#38342a;--amber:#FFA028;--fg:#F3EFE6;--dim:#A39C8B;--up:#35D07F;--dn:#FF6B5E;--cy:#5BC8F5;--gry:#8C8676;--ink:#000000;--mono:'IBM Plex Mono','IBM Plex Sans JP',ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
+html{height:100%;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:0}
+:focus-visible{outline:2px solid var(--cy);outline-offset:-2px}
+#app{height:100%;display:flex;flex-direction:column;max-width:560px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:52px;padding:4px 4px 4px 16px;background:var(--amber);color:var(--ink)}
+header h1{margin:0;min-width:0;font-size:14px;font-weight:700;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb{display:flex;gap:4px;flex:none}
+.hb button{min-height:44px;padding:0 12px;border:0;background:var(--ink);color:var(--amber);font-size:12px;white-space:nowrap}
+.hb button:disabled{opacity:.6}
+#ban{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 4px 4px 16px;background:var(--bar);color:var(--cy);font-size:12px}
+#ban button{min-height:44px;padding:0 12px;border:1px solid var(--cy);background:var(--bg);color:var(--cy);font-size:12px;white-space:nowrap}
+.subt{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);border-bottom:1px solid var(--line)}
+.subt button{min-height:44px;padding:0 2px;border:0;border-bottom:3px solid transparent;background:none;color:var(--dim);font-size:13px}
+.subt button[aria-pressed=true]{border-bottom-color:var(--amber);color:var(--amber);font-weight:700}
+main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 0;display:flex;flex-direction:column;gap:14px}
+main>*{flex-shrink:0}
+.lb{font-size:11px;color:var(--dim);letter-spacing:.08em}
+.big{font-size:40px;font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.mid{font-size:28px;font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.up{color:var(--up)}.dn{color:var(--dn)}.dim{color:var(--dim)}.am{color:var(--amber)}.cy{color:var(--cy)}
+.col{display:flex;flex-direction:column;gap:4px;min-width:0}
+.col.e{align-items:flex-end;text-align:right}
+.row2{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.box{border:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:8px}
+.box.warn{border-color:var(--dn);color:var(--dn);font-size:12px}
+.meter{height:10px;background:var(--bar)}
+.meter i{display:block;height:100%;background:var(--amber)}
+.alloc{display:flex;height:14px;gap:2px}
+.alloc i{display:block;min-width:2px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto 64px;gap:10px 8px;align-items:center}
+.kv4{display:grid;grid-template-columns:14px minmax(0,1fr) auto 56px;gap:10px 8px;align-items:center}
+.sw{width:10px;height:10px}
+.r{text-align:right}
+.gh{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;background:var(--bar);font-size:12px}
+.gh.hot{background:var(--amber);color:var(--ink);font-weight:700}
+.gh.c3{display:grid;grid-template-columns:minmax(0,1fr) 92px 92px}
+.list{display:flex;flex-direction:column}
+.it{display:grid;grid-template-columns:minmax(0,1fr) auto auto;column-gap:12px;row-gap:2px;align-items:baseline;width:100%;min-height:48px;padding:8px;border:0;border-bottom:1px solid var(--bar);background:none;text-align:left}
+.it.c3{grid-template-columns:minmax(0,1fr) 84px 84px;column-gap:8px}
+.it .n{overflow-wrap:anywhere}
+.it .s{grid-column:1/-1;font-size:11px;color:var(--dim)}
+.it .s.am{color:var(--amber)}
+.it .pl{min-width:80px;text-align:right}
+.tag{display:inline-block;min-width:34px;margin-right:6px;padding:0 4px;border:1px solid currentColor;font-size:11px;text-align:center}
+.note{font-size:11px;color:var(--dim)}
+.empty{padding:24px 8px;border:1px dashed var(--line);color:var(--dim);font-size:13px;text-align:center}
+.add{position:sticky;bottom:0;margin-top:auto;padding:14px 0 12px;background:linear-gradient(rgba(0,0,0,0),var(--bg) 35%)}
+.btn{display:block;width:100%;min-height:48px;padding:0 10px;border:1px solid var(--amber);background:var(--bg);color:var(--amber);font-weight:700}
+.btn.pri{background:var(--amber);color:var(--ink)}
+.btn.dgr{border-color:var(--dn);color:var(--dn)}
+.btn.sec{border-color:var(--line);color:var(--fg);font-weight:400}
+nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel)}
+nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:0;border:0;background:none;color:var(--dim);font-size:13px}
+nav button small{font-size:10px}
+nav button[aria-current=page]{background:var(--amber);color:var(--ink);font-weight:700}
+svg.ch{display:block;width:100%;height:auto}
+#sheet{position:fixed;inset:0;z-index:10;background:var(--panel)}
+#sheet .pn{height:100%;max-width:560px;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.sh{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:4px 4px 4px 16px;background:var(--amber);color:var(--ink);font-weight:700;letter-spacing:.06em}
+.sh button{min-height:44px;padding:0 14px;border:0;background:var(--ink);color:var(--amber);font-size:12px;font-weight:400}
+.sb{padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.sb h2{margin:8px 0 0;font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.08em}
+form{display:flex;flex-direction:column;gap:12px;margin:0}
+.fl{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--dim)}
+.fl input,.fl select,.fl textarea{width:100%;min-height:46px;padding:8px 10px;border:1px solid var(--line);border-radius:0;background:var(--bg);color:var(--fg);font-size:16px}
+.fl textarea{min-height:110px;font-size:12px}
+.ck{display:flex;align-items:center;gap:10px;min-height:44px;color:var(--fg);font-size:13px}
+.ck input{width:22px;height:22px;accent-color:var(--amber)}
+.g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.err{margin:0;color:var(--dn);font-size:12px}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:20;max-width:528px;margin:0 auto;padding:10px 12px;background:var(--fg);color:var(--ink);font-size:13px;text-align:center}
+</style>
+<div id="app">
+<header><h1 id="ttl">資産ターミナル</h1><div class="hb" id="hb"></div></header>
+<div id="ban" hidden><span>サンプルデータを表示中</span><button type="button" data-a="clearSample" data-confirm="もう一度押すと消去">消して始める</button></div>
+<div id="sub" class="subt" hidden></div>
+<main id="main"></main>
+<nav id="nav" aria-label="画面切り替え"></nav>
+</div>
+<div id="sheet" hidden></div>
+<div id="toast" role="status" hidden></div>
+<script>
+(function(){
+'use strict';
+var KEY='asset-terminal-v1';
+var $=function(s){return document.querySelector(s)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var uid=function(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)};
+var pad=function(n){return String(n).padStart(2,'0')};
+var ymd=function(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+var today=function(){return ymd(new Date())};
+var ago=function(n){var d=new Date();d.setDate(d.getDate()-n);return ymd(d)};
+var num=function(v){
+  if(typeof v==='number')return v;
+  var s=String(v==null?'':v).replace(/[０-９．－]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0)}).replace(/[,，\s¥￥円]/g,'');
+  if(s==='')return NaN;
+  var n=Number(s);return isFinite(n)?n:NaN;
+};
+var HID='＊＊＊＊';
+var S,storageOK=true,busy=false;
+var ui={tab:'sum',secTab:'pos',range:'6m',kind:'buy',msg:''};
+
+/* ---------- formatting ---------- */
+var f0=function(n){return Math.round(n).toLocaleString('ja-JP')};
+var fx2=function(n){return Number(n).toLocaleString('ja-JP',{maximumFractionDigits:2})};
+var yen=function(n){return S.settings.hide?HID:f0(n)};
+var sgn=function(n){n=Math.round(n);return S.settings.hide?HID:(n>0?'+':n<0?'-':'')+f0(Math.abs(n))};
+var pct=function(n){return isFinite(n)?(n>0?'+':n<0?'-':'')+Math.abs(n).toFixed(1)+'%':'—'};
+var cls=function(n){return n>0?'up':n<0?'dn':'dim'};
+var arrow=function(n){return n>0?'▲ ':n<0?'▼ ':''};
+var qf=function(n){return S.settings.hide?HID:Number(n).toLocaleString('ja-JP',{maximumFractionDigits:4})};
+var md=function(s){return s?Number(s.slice(5,7))+'/'+Number(s.slice(8,10)):''};
+var ys=function(s){return s?s.replace(/-/g,'/'):''};
+var stamp=function(ms){if(!ms)return '未取得';var d=new Date(ms);return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes())};
+
+/* ---------- state ---------- */
+function blank(){return {v:1,sample:false,settings:{target:0,hide:false},secs:[],trades:[],margins:[],divs:[],cash:[],fx:{},items:[],history:[],prices:{},lastFetch:null}}
+function sample(){
+  var s=blank(),t=today(),y=new Date().getFullYear();
+  s.sample=true;s.settings.target=20000000;
+  var mk=function(type,code,name,broker,unit,p,qty,cost){
+    var o={id:uid(),type:type,code:code,name:name,broker:broker,unit:unit,auto:false};s.secs.push(o);
+    s.trades.push({id:uid(),secId:o.id,date:ago(200),side:'buy',qty:qty,price:cost,fee:0});
+    s.prices[type==='jp'?code:'id:'+o.id]={p:p,at:t,src:'manual'};
+  };
+  mk('jp','0001','銘柄A','A証券',1,2500,300,2000);
+  mk('jp','0002','銘柄B (ETF)','A証券',1,1800,1000,1500);
+  mk('jp','0003','銘柄C','A証券',1,3500,200,4000);
+  mk('fund','','投資信託D','B証券',10000,15000,2000000,13000);
+  mk('other','','その他E','B証券',1,1000000,1,900000);
+  s.margins.push({id:uid(),code:'0004',name:'銘柄F',broker:'A証券',side:'long',qty:100,entry:3000,date:ago(20),auto:false});
+  s.margins.push({id:uid(),code:'0005',name:'銘柄G',broker:'A証券',side:'short',qty:100,entry:1500,date:ago(12),auto:false});
+  s.prices['0004']={p:2800,at:t,src:'manual'};s.prices['0005']={p:1800,at:t,src:'manual'};
+  var inYear=function(n){var d=ago(n);return d<y+'-01-01'?y+'-01-01':d};
+  s.divs.push({id:uid(),name:'銘柄A',date:inYear(110),amount:36000});
+  s.divs.push({id:uid(),name:'銘柄B (ETF)',date:inYear(40),amount:60000});
+  [['A銀行 普通','JPY',2000000,3],['B銀行 定期','JPY',1500000,13],['財布・手元現金','JPY',50000,0],['電子マネー','JPY',30000,0],['C銀行 外貨普通','USD',6000,5],['手元の外貨','EUR',125,30]].forEach(function(a){
+    s.cash.push({id:uid(),name:a[0],cur:a[1],amount:a[2],at:ago(a[3])});
+  });
+  s.fx={USD:{rate:150,at:t,src:'manual'},EUR:{rate:160,at:t,src:'manual'}};
+  [['腕時計',1400,300000,280000,42],['ノートPC',950,250000,150000,12],['カメラ',1150,180000,120000,59],['自転車',520,120000,95678,217]].forEach(function(a){
+    s.items.push({id:uid(),name:a[0],buyDate:ago(a[1]),buyPrice:a[2],value:a[3],valueAt:ago(a[4]),memo:''});
+  });
+  var now=new Date(),tot=[11200000,11450000,11800000,11650000,12222222];
+  for(var i=5;i>=1;i--){s.history.push({date:ymd(new Date(now.getFullYear(),now.getMonth()-i+1,0)),total:tot[5-i]})}
+  return s;
+}
+function load(){
+  try{localStorage.setItem(KEY+'-t','1');localStorage.removeItem(KEY+'-t')}catch(e){storageOK=false}
+  try{
+    var t=localStorage.getItem(KEY);
+    if(t){var o=JSON.parse(t);if(o&&o.v===1){var b=blank();Object.keys(o).forEach(function(k){b[k]=o[k]});b.settings=Object.assign({target:0,hide:false},o.settings||{});return b}}
+  }catch(e){}
+  return sample();
+}
+function save(){
+  recordToday();
+  try{localStorage.setItem(KEY,JSON.stringify(S));storageOK=true}catch(e){storageOK=false}
+}
+
+/* ---------- calculations ---------- */
+function pk(sec){return sec.type==='jp'&&sec.code?String(sec.code).toUpperCase():'id:'+sec.id}
+function mk_(m){return String(m.code).toUpperCase()}
+function dir(m){return m.side==='long'?1:-1}
+function calc(){
+  var H=[],real=[],yr=String(new Date().getFullYear());
+  S.secs.forEach(function(sec){
+    var qty=0,cost=0;
+    S.trades.filter(function(t){return t.secId===sec.id}).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0}).forEach(function(t){
+      var amt=t.qty*t.price/sec.unit,fee=t.fee||0;
+      if(t.side==='buy'){qty+=t.qty;cost+=amt+fee}
+      else{var avg=qty>0?cost/qty:0;real.push({date:t.date,amt:amt-fee-avg*t.qty});cost-=avg*t.qty;qty-=t.qty;if(qty<1e-9){qty=0;cost=0}}
+    });
+    var p=S.prices[pk(sec)],value=p?qty*p.p/sec.unit:cost;
+    H.push({sec:sec,qty:qty,cost:cost,avg:qty?cost/qty*sec.unit:0,p:p,value:value,pl:p?value-cost:0});
+  });
+  var M=[];
+  S.margins.forEach(function(m){
+    if(m.closed){real.push({date:m.closeDate,amt:(m.closePrice-m.entry)*m.qty*dir(m)});return}
+    var p=S.prices[mk_(m)];M.push({m:m,p:p,pl:p?(p.p-m.entry)*m.qty*dir(m):0});
+  });
+  var held=H.filter(function(h){return h.qty>0});
+  var sum=function(a,f){return a.reduce(function(x,y){return x+f(y)},0)};
+  var cash=S.cash.map(function(c){var rate=c.cur==='JPY'?1:(S.fx[c.cur]?S.fx[c.cur].rate:null);return {c:c,rate:rate,jpy:rate==null?0:c.amount*rate}});
+  var C={H:H,held:held,M:M,cash:cash};
+  C.secVal=sum(held,function(h){return h.value});C.secCost=sum(held,function(h){return h.cost});C.secPL=C.secVal-C.secCost;
+  C.marginPL=sum(M,function(x){return x.pl});C.secTotal=C.secVal+C.marginPL;
+  C.cashVal=sum(cash,function(x){return x.jpy});
+  C.itemsVal=sum(S.items,function(i){return i.value||0});C.itemsCost=sum(S.items,function(i){return i.buyPrice||0});
+  C.total=C.secTotal+C.cashVal+C.itemsVal;
+  C.realYear=sum(real.filter(function(r){return String(r.date).slice(0,4)===yr}),function(r){return r.amt});
+  C.divYear=sum(S.divs.filter(function(d){return String(d.date).slice(0,4)===yr}),function(d){return d.amount});
+  return C;
+}
+function recordToday(){
+  if(!(S.secs.length||S.cash.length||S.items.length||S.margins.length))return;
+  var t=today(),total=Math.round(calc().total),r=S.history.find(function(h){return h.date===t});
+  if(r){if(!r.manual)r.total=total}else S.history.push({date:t,total:total});
+  S.history.sort(function(a,b){return a.date<b.date?-1:1});
+}
+function prevMonthRec(){
+  var d=new Date(),first=ymd(new Date(d.getFullYear(),d.getMonth(),1)),r=null;
+  S.history.forEach(function(h){if(h.date<first)r=h});return r;
+}
+
+/* ---------- price / fx fetch ---------- */
+var PROX=[function(u){return u},function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u)},function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},function(u){return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)}];
+var goodProx=null;
+function getJSON(url,ms){
+  var c=new AbortController(),t=setTimeout(function(){c.abort()},ms||6000);
+  return fetch(url,{signal:c.signal,cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()}).finally(function(){clearTimeout(t)});
+}
+async function quoteJP(code){
+  var u='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(code)+'.T?interval=1d&range=1d';
+  var order=goodProx!=null?[goodProx]:[1,2,3,0];
+  for(var k=0;k<order.length;k++){
+    try{
+      var j=await getJSON(PROX[order[k]](u));
+      var m=j&&j.chart&&j.chart.result&&j.chart.result[0]&&j.chart.result[0].meta;
+      if(m&&isFinite(m.regularMarketPrice)){goodProx=order[k];return {p:m.regularMarketPrice,name:m.shortName||m.longName||''}}
+    }catch(e){}
+  }
+  return null;
+}
+async function fetchFX(){
+  var curs=[];S.cash.forEach(function(c){if(c.cur!=='JPY'&&curs.indexOf(c.cur)<0)curs.push(c.cur)});
+  if(!curs.length)return {n:0,ok:0};
+  var rates=null;
+  try{var a=await getJSON('https://open.er-api.com/v6/latest/JPY');if(a&&a.rates)rates=a.rates}catch(e){}
+  if(!rates){try{var b=await getJSON('https://api.frankfurter.app/latest?from=JPY');if(b&&b.rates)rates=b.rates}catch(e){}}
+  var ok=0;
+  if(rates)curs.forEach(function(c){if(rates[c]>0){S.fx[c]={rate:Math.round(1/rates[c]*1000)/1000,at:today(),src:'auto'};ok++}});
+  return {n:curs.length,ok:ok};
+}
+async function fetchStocks(){
+  var codes=[];
+  var C=calc();
+  C.held.forEach(function(h){if(h.sec.type==='jp'&&h.sec.auto&&h.sec.code){var k=pk(h.sec);if(codes.indexOf(k)<0)codes.push(k)}});
+  C.M.forEach(function(x){if(x.m.auto!==false){var k=mk_(x.m);if(codes.indexOf(k)<0)codes.push(k)}});
+  var ok=0;
+  for(var i=0;i<codes.length;i++){
+    var q=await quoteJP(codes[i]);
+    if(q){S.prices[codes[i]]={p:q.p,at:today(),src:'auto'};ok++;
+      S.secs.forEach(function(s){if(pk(s)===codes[i]&&(!s.name||s.name===s.code)&&q.name)s.name=q.name});
+      S.margins.forEach(function(m){if(mk_(m)===codes[i]&&!m.name&&q.name)m.name=q.name});
+    }else if(i===0&&goodProx==null)break;
+  }
+  return {n:codes.length,ok:ok};
+}
+async function updateAll(quiet){
+  if(busy)return;busy=true;render();
+  var a={n:0,ok:0},b={n:0,ok:0};
+  try{a=await fetchStocks()}catch(e){}
+  try{b=await fetchFX()}catch(e){}
+  busy=false;
+  if(a.ok||b.ok)S.lastFetch=Date.now();
+  var parts=[];
+  if(a.n)parts.push('株価 '+a.ok+'/'+a.n+'件');
+  if(b.n)parts.push('為替 '+b.ok+'/'+b.n+'件');
+  var failed=(a.n-a.ok)+(b.n-b.ok);
+  ui.msg=parts.length?parts.join('・')+' 取得'+(failed?'（取れなかった分は手入力できます）':''):'';
+  save();render();
+  if(!quiet)toast(parts.length?ui.msg:'自動取得の対象がありません');
+}
+
+/* ---------- chart ---------- */
+function nice(x){var p=Math.pow(10,Math.floor(Math.log10(x))),f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
+function chart(recs){
+  var W=358,Hh=180,L=54,R=10,T=10,B=24;
+  var xs=recs.map(function(r){return +new Date(r.date+'T00:00:00')}),yv=recs.map(function(r){return r.total});
+  var lo=Math.min.apply(null,yv),hi=Math.max.apply(null,yv);
+  if(lo===hi){var q=Math.abs(lo)*.05||1;lo-=q;hi+=q}
+  var step=nice((hi-lo)/3);lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
+  var x0=xs[0],x1=xs[xs.length-1];
+  var X=function(v){return x1===x0?(L+W-R)/2:L+(v-x0)/(x1-x0)*(W-L-R)};
+  var Y=function(v){return T+(hi-v)/(hi-lo)*(Hh-T-B)};
+  var lab=function(v){return S.settings.hide?'＊＊':(step>=10000?(v/10000).toLocaleString('ja-JP',{maximumFractionDigits:1})+'万':f0(v))};
+  var o='<svg class="ch" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="総資産の推移グラフ">';
+  for(var v=lo;v<=hi+step/2;v+=step){
+    var y=Y(v).toFixed(1);
+    o+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="'+(v===lo?'#5a5444':'#2a2720')+'" stroke-width="1"/>';
+    o+='<text x="'+(L-6)+'" y="'+(+y+3.5)+'" fill="#A39C8B" font-size="10" text-anchor="end">'+lab(v)+'</text>';
+  }
+  var pts=recs.map(function(r,i){return X(xs[i]).toFixed(1)+','+Y(r.total).toFixed(1)});
+  if(recs.length>1){
+    o+='<polygon points="'+X(x0).toFixed(1)+','+Y(lo).toFixed(1)+' '+pts.join(' ')+' '+X(x1).toFixed(1)+','+Y(lo).toFixed(1)+'" fill="#FFA028" fill-opacity=".12"/>';
+    o+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="#FFA028" stroke-width="2"/>';
+  }
+  var long=(x1-x0)>300*864e5,lastX=1e9;
+  for(var i=recs.length-1;i>=0;i--){
+    var px=X(xs[i]),py=Y(recs[i].total),end=i===recs.length-1;
+    if(recs.length<=40||end)o+='<rect x="'+(px-(end?4:2.5)).toFixed(1)+'" y="'+(py-(end?4:2.5)).toFixed(1)+'" width="'+(end?8:5)+'" height="'+(end?8:5)+'" fill="'+(end?'#F3EFE6':'#FFA028')+'"/>';
+    if(lastX-px>=50){
+      var d=recs[i].date,t=long?d.slice(2,4)+'/'+Number(d.slice(5,7)):md(d);
+      o+='<text x="'+px.toFixed(1)+'" y="'+(Hh-6)+'" fill="#A39C8B" font-size="10" text-anchor="'+(end&&recs.length>1?'end':'middle')+'">'+t+'</text>';
+      lastX=end&&recs.length>1?px-14:px;
+    }
+  }
+  return o+'</svg>';
+}
+
+/* ---------- views ---------- */
+var TABS=[['sum','総合','1 総合 SUMMARY'],['sec','証券','2 証券 SECURITIES'],['cash','現預金','3 現預金 CASH'],['items','備品','4 備品 ITEMS'],['hist','推移','5 推移 HISTORY']];
+function secLabel(s){return (s.code?s.code+' ':'')+s.name+(s.broker?'（'+s.broker+'）':'')}
+function unitName(s){return s.type==='fund'?'口':s.type==='jp'?'株':''}
+function srcLabel(p){return p?(p.src==='auto'?'自動 ':'手入力 ')+md(p.at):'現在値 未入力'}
+
+function viewSum(C){
+  var o='';
+  if(!storageOK)o+='<div class="box warn">この画面ではデータを保存できません。閉じると入力内容が消えます。設定のバックアップで書き出してください。</div>';
+  var prev=prevMonthRec(),chg='';
+  if(prev){var d=C.total-prev.total;chg='<div class="'+cls(d)+'">'+arrow(d)+sgn(d)+'　'+pct(prev.total?d/prev.total*100:NaN)+'　<span class="dim">前月末比</span></div>'}
+  o+='<section class="col"><div class="lb">総資産 TOTAL (JPY)</div><div class="big">'+yen(C.total)+'</div>'+chg+'</section>';
+  var tg=S.settings.target;
+  if(tg>0){
+    var rate=C.total/tg*100,rest=tg-C.total;
+    o+='<section class="box"><div class="row2"><span class="lb">目標 TARGET</span><span>'+yen(tg)+'</span></div><div class="meter"><i style="width:'+Math.max(0,Math.min(100,rate)).toFixed(1)+'%"></i></div><div class="row2"><span class="am">達成率 '+(isFinite(rate)?rate.toFixed(1):'0.0')+'%</span><span class="dim">'+(rest>0?'残り '+yen(rest):'達成')+'</span></div></section>';
+  }else o+='<button type="button" class="btn sec" data-a="settings">目標資産額を設定する</button>';
+  var parts=[['有価証券',C.secTotal,'var(--amber)'],['現金預貯金',C.cashVal,'var(--cy)'],['備品',C.itemsVal,'var(--gry)']];
+  var pos=parts.reduce(function(a,p){return a+Math.max(0,p[1])},0);
+  o+='<section class="col" style="gap:8px"><div class="lb">内訳 ALLOCATION</div>';
+  if(pos>0)o+='<div class="alloc">'+parts.map(function(p){return p[1]>0?'<i style="flex:'+(p[1]/pos).toFixed(4)+';background:'+p[2]+'"></i>':''}).join('')+'</div>';
+  o+='<div class="kv4">'+parts.map(function(p){return '<i class="sw" style="background:'+p[2]+'"></i><span>'+p[0]+'</span><span class="r">'+yen(p[1])+'</span><span class="r am">'+(pos>0?(Math.max(0,p[1])/pos*100).toFixed(1)+'%':'—')+'</span>'}).join('')+'</div></section>';
+  o+='<section class="col" style="gap:8px"><div class="lb">損益 P/L</div><div class="box"><div class="kv">';
+  o+='<span>現物 含み損益</span><span class="r '+cls(C.secPL)+'">'+sgn(C.secPL)+'</span><span class="r '+cls(C.secPL)+'">'+(C.secCost>0?pct(C.secPL/C.secCost*100):'')+'</span>';
+  o+='<span>信用 評価損益</span><span class="r '+cls(C.marginPL)+'">'+sgn(C.marginPL)+'</span><span></span>';
+  o+='<span>実現損益（今年）</span><span class="r '+cls(C.realYear)+'">'+sgn(C.realYear)+'</span><span></span>';
+  o+='<span>配当・分配金（今年）</span><span class="r '+cls(C.divYear)+'">'+sgn(C.divYear)+'</span><span></span>';
+  o+='</div></div></section>';
+  o+='<div class="note">株価・為替の自動取得 '+stamp(S.lastFetch)+(ui.msg?'<br>'+esc(ui.msg):'')+'</div>';
+  return o;
+}
+
+function viewSec(C){
+  var o='';
+  if(ui.secTab==='pos'){
+    o+='<div class="row2"><div class="col"><span class="lb">現物 評価額</span><span class="mid">'+yen(C.secVal)+'</span></div><div class="col e '+cls(C.secPL)+'"><span>'+arrow(C.secPL)+sgn(C.secPL)+'</span><span>'+(C.secCost>0?pct(C.secPL/C.secCost*100):'')+'</span></div></div>';
+    if(!C.held.length&&!C.M.length)o+='<div class="empty">まだ銘柄がありません。<br>下の「＋ 取引を記録」から最初の買いを入力してください。</div>';
+    var groups={},order=[];
+    C.held.forEach(function(h){var b=h.sec.broker||'証券会社 未設定';if(!groups[b]){groups[b]=[];order.push(b)}groups[b].push(h)});
+    order.forEach(function(b){
+      var tot=groups[b].reduce(function(a,h){return a+h.value},0);
+      o+='<div class="list"><div class="gh"><span>'+esc(b)+'</span><span>'+yen(tot)+'</span></div>';
+      groups[b].forEach(function(h){
+        var s=h.sec,u=unitName(s);
+        o+='<button type="button" class="it" data-a="sec" data-id="'+s.id+'"><span class="n">'+esc((s.code?s.code+' ':'')+s.name)+'</span><span class="r">'+yen(h.value)+'</span><span class="pl '+cls(h.pl)+'">'+sgn(h.pl)+'</span>';
+        o+='<span class="s">'+qf(h.qty)+u+' ／ 平均 '+fx2(h.avg)+' → 現在 '+(h.p?fx2(h.p.p):'—')+' ／ '+srcLabel(h.p)+'</span></button>';
+      });
+      o+='</div>';
+    });
+    if(C.M.length){
+      o+='<div class="list"><div class="gh hot"><span>信用建玉 MARGIN</span><span>評価損益 '+sgn(C.marginPL)+'</span></div>';
+      C.M.forEach(function(x){var m=x.m;
+        o+='<button type="button" class="it" data-a="margin" data-id="'+m.id+'"><span class="n">'+esc(m.code+' '+(m.name||''))+' <span class="'+(m.side==='long'?'cy':'am')+'">'+(m.side==='long'?'買建':'売建')+'</span></span><span></span><span class="pl '+cls(x.pl)+'">'+sgn(x.pl)+'</span>';
+        o+='<span class="s">'+qf(m.qty)+'株 ／ 建単価 '+fx2(m.entry)+' → 現在 '+(x.p?fx2(x.p.p):'—')+' ／ '+esc(m.broker||'')+' ／ '+srcLabel(x.p)+'</span></button>';
+      });
+      o+='</div>';
+    }
+    o+='<div class="add"><button type="button" class="btn" data-a="record" data-k="buy">＋ 取引を記録（買い・売り・建玉・配当）</button></div>';
+  }else if(ui.secTab==='log'){
+    o+='<div class="row2"><div class="col"><span class="lb">実現損益（今年）</span><span class="mid '+cls(C.realYear)+'">'+sgn(C.realYear)+'</span></div></div>';
+    var L=[];
+    S.trades.forEach(function(t){var s=S.secs.find(function(x){return x.id===t.secId});if(!s)return;
+      L.push({date:t.date,tag:t.side==='buy'?'買':'売',c:t.side==='buy'?'cy':'am',n:(s.code?s.code+' ':'')+s.name,sub:qf(t.qty)+unitName(s)+' × '+fx2(t.price)+(t.fee?' ／ 手数料 '+yen(t.fee):''),a:'trade',id:t.id,amt:yen(t.qty*t.price/s.unit)})});
+    S.margins.forEach(function(m){
+      L.push({date:m.date,tag:m.side==='long'?'買建':'売建',c:m.side==='long'?'cy':'am',n:m.code+' '+(m.name||''),sub:qf(m.qty)+'株 × '+fx2(m.entry),a:'margin',id:m.id,amt:''});
+      if(m.closed){var pl=(m.closePrice-m.entry)*m.qty*dir(m);L.push({date:m.closeDate,tag:'決済',c:'dim',n:m.code+' '+(m.name||''),sub:qf(m.qty)+'株 × '+fx2(m.closePrice),a:'margin',id:m.id,amt:'<span class="'+cls(pl)+'">'+sgn(pl)+'</span>'})}
+    });
+    L.sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0});
+    if(!L.length)o+='<div class="empty">取引の記録はまだありません。</div>';
+    else{o+='<div class="list"><div class="gh"><span>取引</span><span>金額</span></div>';
+      L.forEach(function(e){o+='<button type="button" class="it" data-a="'+e.a+'" data-id="'+e.id+'"><span class="n"><span class="tag '+e.c+'">'+e.tag+'</span>'+esc(e.n)+'</span><span></span><span class="pl">'+e.amt+'</span><span class="s">'+ys(e.date)+' ／ '+e.sub+'</span></button>'});
+      o+='</div><div class="note">行をタップすると修正・削除できます</div>'}
+    o+='<div class="add"><button type="button" class="btn" data-a="record" data-k="buy">＋ 取引を記録</button></div>';
+  }else{
+    o+='<div class="row2"><div class="col"><span class="lb">配当・分配金（今年）</span><span class="mid">'+yen(C.divYear)+'</span></div></div>';
+    var D=S.divs.slice().sort(function(a,b){return a.date<b.date?1:-1});
+    if(!D.length)o+='<div class="empty">配当の記録はまだありません。</div>';
+    else{var yrs={},yo=[];D.forEach(function(d){var y=d.date.slice(0,4);if(!yrs[y]){yrs[y]=[];yo.push(y)}yrs[y].push(d)});
+      yo.forEach(function(y){o+='<div class="list"><div class="gh"><span>'+y+'年</span><span>'+yen(yrs[y].reduce(function(a,d){return a+d.amount},0))+'</span></div>';
+        yrs[y].forEach(function(d){o+='<button type="button" class="it" data-a="div" data-id="'+d.id+'"><span class="n">'+esc(d.name)+'</span><span></span><span class="pl up">'+sgn(d.amount)+'</span><span class="s">'+ys(d.date)+'</span></button>'});
+        o+='</div>'});
+    }
+    o+='<div class="add"><button type="button" class="btn" data-a="record" data-k="div">＋ 配当を記録</button></div>';
+  }
+  return o;
+}
+
+function viewCash(C){
+  var o='<section class="col"><span class="lb">現金預貯金 合計 (JPY)</span><span class="mid">'+yen(C.cashVal)+'</span></section>';
+  if(!C.cash.length)o+='<div class="empty">口座はまだありません。<br>下の「＋ 口座を追加」から銀行口座や財布を登録してください。</div>';
+  var jp=C.cash.filter(function(x){return x.c.cur==='JPY'}),fxr=C.cash.filter(function(x){return x.c.cur!=='JPY'});
+  if(jp.length){o+='<div class="list"><div class="gh"><span>円 JPY</span><span>'+yen(jp.reduce(function(a,x){return a+x.jpy},0))+'</span></div>';
+    jp.forEach(function(x){o+='<button type="button" class="it" data-a="cash" data-id="'+x.c.id+'"><span class="n">'+esc(x.c.name)+'</span><span></span><span class="pl">'+yen(x.jpy)+'</span><span class="s">'+md(x.c.at)+' 更新</span></button>'});o+='</div>'}
+  if(fxr.length){o+='<div class="list"><div class="gh"><span>外貨 FX（円換算）</span><span>'+yen(fxr.reduce(function(a,x){return a+x.jpy},0))+'</span></div>';
+    fxr.forEach(function(x){var f=S.fx[x.c.cur];
+      o+='<button type="button" class="it" data-a="cash" data-id="'+x.c.id+'"><span class="n">'+esc(x.c.name)+' <span class="cy">'+esc(x.c.cur)+'</span></span><span></span><span class="pl">'+(x.rate==null?'<span class="am">レート未入力</span>':yen(x.jpy))+'</span>';
+      o+='<span class="s">'+(S.settings.hide?HID:fx2(x.c.amount))+' '+esc(x.c.cur)+(f?' × '+fx2(f.rate)+' ／ レート'+(f.src==='auto'?'自動 ':'手入力 ')+md(f.at):'')+'</span></button>'});o+='</div>'}
+  if(C.cash.length)o+='<div class="note">行をタップすると残高を書き換えられます</div>';
+  o+='<div class="add"><button type="button" class="btn" data-a="cash" data-id="">＋ 口座を追加</button></div>';
+  return o;
+}
+
+function viewItems(C){
+  var d=C.itemsVal-C.itemsCost;
+  var o='<div class="row2"><div class="col"><span class="lb">備品 時価合計 (JPY)</span><span class="mid">'+yen(C.itemsVal)+'</span></div><div class="col e"><span class="note">購入額 '+yen(C.itemsCost)+'</span><span class="'+cls(d)+'">'+arrow(d)+sgn(d)+'</span></div></div>';
+  if(!S.items.length)o+='<div class="empty">備品はまだありません。<br>下の「＋ 備品を追加」から登録してください。</div>';
+  else{
+    o+='<div class="list"><div class="gh c3"><span>品名</span><span class="r">購入額</span><span class="r">時価</span></div>';
+    var lim=ago(180);
+    S.items.slice().sort(function(a,b){return (b.value||0)-(a.value||0)}).forEach(function(i){
+      var stale=i.valueAt&&i.valueAt<lim;
+      o+='<button type="button" class="it c3" data-a="item" data-id="'+i.id+'"><span class="n">'+esc(i.name)+'</span><span class="r dim">'+yen(i.buyPrice||0)+'</span><span class="r">'+yen(i.value||0)+'</span>';
+      o+='<span class="s'+(stale?' am':'')+'">'+(i.buyDate?'購入 '+ys(i.buyDate).slice(0,7)+' ／ ':'')+'時価更新 '+ys(i.valueAt)+(stale?'（半年以上前）':'')+'</span></button>';
+    });
+    o+='</div><div class="note">行をタップすると時価を書き換えられます。更新が半年以上前のものは色を変えて知らせます</div>';
+  }
+  o+='<div class="add"><button type="button" class="btn" data-a="item" data-id="">＋ 備品を追加</button></div>';
+  return o;
+}
+
+function viewHist(C){
+  var days={'6m':183,'1y':365,'3y':1096}[ui.range],from=days?ago(days):'0';
+  var recs=S.history.filter(function(h){return h.date>=from});
+  var o='<div class="row2"><div class="col"><span class="lb">総資産 TOTAL (JPY)</span><span class="mid">'+yen(C.total)+'</span></div>';
+  if(recs.length>1){var d=recs[recs.length-1].total-recs[0].total,b=recs[0].total;o+='<div class="col e '+cls(d)+'"><span>'+arrow(d)+sgn(d)+'</span><span>期間 '+pct(b?d/b*100:NaN)+'</span></div>'}
+  o+='</div>';
+  if(!recs.length)o+='<div class="empty">この期間の記録はまだありません。<br>資産を登録すると、アプリを開いた日に自動で記録されます。</div>';
+  else{
+    o+=chart(recs);
+    o+='<div class="list"><div class="gh c3"><span>記録日</span><span class="r">総資産</span><span class="r">前回比</span></div>';
+    for(var i=recs.length-1;i>=0;i--){
+      var r=recs[i],idx=S.history.indexOf(r),p=idx>0?S.history[idx-1]:null,df=p?r.total-p.total:null;
+      o+='<button type="button" class="it c3" data-a="hist" data-id="'+r.date+'"><span class="n">'+ys(r.date)+(r.manual?' <span class="note">手修正</span>':'')+'</span><span class="r">'+yen(r.total)+'</span><span class="r '+(df==null?'dim':cls(df))+'">'+(df==null?'—':sgn(df))+'</span></button>';
+    }
+    o+='</div><div class="note">アプリを開いた日に自動で記録します。行をタップすると修正できます</div>';
+  }
+  o+='<div class="add"><button type="button" class="btn" data-a="hist" data-id="">＋ 過去の記録を追加</button></div>';
+  return o;
+}
+
+function render(){
+  var C=calc(),t=TABS.find(function(x){return x[0]===ui.tab}),main=$('#main'),keep=main.dataset.tab===ui.tab+ui.secTab?main.scrollTop:0;
+  $('#ttl').textContent=t[2];
+  var hb='';
+  if(ui.tab==='sum')hb='<button type="button" data-a="hide" aria-pressed="'+S.settings.hide+'">'+(S.settings.hide?'金額を表示':'金額を隠す')+'</button><button type="button" data-a="settings">設定</button>';
+  if(ui.tab==='sec')hb='<button type="button" data-a="update"'+(busy?' disabled':'')+'>'+(busy?'更新中…':'株価を更新')+'</button>';
+  if(ui.tab==='cash')hb='<button type="button" data-a="update"'+(busy?' disabled':'')+'>'+(busy?'更新中…':'為替を更新')+'</button>';
+  if(ui.tab==='hist')hb='<button type="button" data-a="settings">バックアップ</button>';
+  $('#hb').innerHTML=hb;
+  $('#ban').hidden=!S.sample;
+  var sub=$('#sub'),st=null;
+  if(ui.tab==='sec')st=[['pos','現物・建玉'],['log','取引履歴'],['div','配当']].map(function(x){return '<button type="button" data-a="secTab" data-k="'+x[0]+'" aria-pressed="'+(ui.secTab===x[0])+'">'+x[1]+'</button>'});
+  if(ui.tab==='hist')st=[['6m','6か月'],['1y','1年'],['3y','3年'],['all','全期間']].map(function(x){return '<button type="button" data-a="range" data-k="'+x[0]+'" aria-pressed="'+(ui.range===x[0])+'">'+x[1]+'</button>'});
+  sub.hidden=!st;sub.innerHTML=st?st.join(''):'';
+  main.innerHTML={sum:viewSum,sec:viewSec,cash:viewCash,items:viewItems,hist:viewHist}[ui.tab](C);
+  main.dataset.tab=ui.tab+ui.secTab;main.scrollTop=keep;
+  $('#nav').innerHTML=TABS.map(function(x,i){return '<button type="button" data-a="tab" data-k="'+x[0]+'"'+(x[0]===ui.tab?' aria-current="page"':'')+'><small>'+(i+1)+'</small><span>'+x[1]+'</span></button>'}).join('');
+}
+
+/* ---------- sheets ---------- */
+var NUMA='inputmode="decimal" autocomplete="off"';
+function fld(label,id,val,attr){return '<label class="fl" for="'+id+'"><span>'+label+'</span><input id="'+id+'" name="'+id+'" value="'+esc(val==null?'':val)+'" '+(attr||'')+'></label>'}
+function sel(label,id,opts,val){return '<label class="fl" for="'+id+'"><span>'+label+'</span><select id="'+id+'" name="'+id+'">'+opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'}
+function dateF(label,id,val){return fld(label,id,val||today(),'type="date"')}
+var ERR='<p class="err" hidden></p>';
+var delBtn=function(a,id,label){return '<button type="button" class="btn dgr" data-a="'+a+'" data-id="'+id+'" data-confirm="もう一度押すと削除します">'+(label||'削除する')+'</button>'};
+function openSheet(title,body){
+  var sh=$('#sheet');
+  sh.innerHTML='<div class="pn"><div class="sh"><span>'+title+'</span><button type="button" data-a="close">閉じる</button></div><div class="sb">'+body+'</div></div>';
+  sh.hidden=false;
+}
+function closeSheet(){$('#sheet').hidden=true;$('#sheet').innerHTML=''}
+function brokerList(){var b=[];S.secs.concat(S.margins).forEach(function(x){if(x.broker&&b.indexOf(x.broker)<0)b.push(x.broker)});return '<datalist id="dl-br">'+b.map(function(x){return '<option value="'+esc(x)+'"></option>'}).join('')+'</datalist>'}
+
+function sheetRecord(kind){
+  ui.kind=kind;
+  var C=calc();
+  var tabs='<div class="subt">'+[['buy','現物 買い'],['sell','現物 売り'],['margin','信用 新規'],['div','配当']].map(function(x){return '<button type="button" data-a="record" data-k="'+x[0]+'" aria-pressed="'+(x[0]===kind)+'">'+x[1]+'</button>'}).join('')+'</div>';
+  var b='';
+  if(kind==='buy'){
+    var opts=S.secs.map(function(s){return [s.id,secLabel(s)]});opts.push(['__new','＋ 新しい銘柄を追加']);
+    b='<form data-f="buy">'+sel('銘柄','f-sec',opts,opts[0][0])+'<div id="newsec" class="col" style="gap:12px"'+(S.secs.length?' hidden':'')+'>'+
+      sel('種類','f-type',[['jp','日本株・ETF（株価を自動取得）'],['fund','投資信託（基準価額を手入力）'],['other','その他（評価額を手入力）']],'jp')+
+      '<div class="g2">'+fld('銘柄コード（日本株・ETF）','f-code','','autocapitalize="characters" autocomplete="off" placeholder="例 7203"')+fld('証券会社','f-broker','','list="dl-br" autocomplete="off"')+'</div>'+
+      fld('銘柄名（空欄なら自動取得を試します）','f-name','','autocomplete="off"')+brokerList()+'</div>'+
+      '<div class="g2">'+dateF('約定日','f-date')+fld('数量（株・口）','f-qty','',NUMA)+'</div>'+
+      '<div class="g2">'+fld('単価','f-price','',NUMA)+fld('手数料','f-fee','0',NUMA)+'</div>'+
+      '<p class="note">投資信託は「口数」と「1万口あたりの基準価額」を入力します。その他は数量1・単価に取得額を入れると簡単です。</p>'+ERR+'<button class="btn pri">買いを記録する</button></form>';
+  }else if(kind==='sell'){
+    if(!C.held.length)b='<div class="empty">売れる銘柄がありません。先に買いを記録してください。</div>';
+    else b='<form data-f="sell">'+sel('銘柄','f-sec',C.held.map(function(h){return [h.sec.id,secLabel(h.sec)+' 保有 '+Number(h.qty).toLocaleString('ja-JP')]}),C.held[0].sec.id)+
+      '<div class="g2">'+dateF('約定日','f-date')+fld('数量（株・口）','f-qty','',NUMA)+'</div>'+
+      '<div class="g2">'+fld('売却単価','f-price','',NUMA)+fld('手数料','f-fee','0',NUMA)+'</div>'+
+      '<p class="note">平均取得単価との差が実現損益として記録されます。受け取った代金は現預金タブの残高に自分で反映してください。</p>'+ERR+'<button class="btn pri">売りを記録する</button></form>';
+  }else if(kind==='margin'){
+    b='<form data-f="marginNew"><div class="g2">'+fld('銘柄コード','f-code','','autocapitalize="characters" autocomplete="off" placeholder="例 7203"')+sel('売買','f-side',[['long','買建'],['short','売建']],'long')+'</div>'+
+      '<div class="g2">'+fld('銘柄名（空欄可）','f-name','','autocomplete="off"')+fld('証券会社','f-broker','','list="dl-br" autocomplete="off"')+'</div>'+brokerList()+
+      '<div class="g2">'+dateF('建日','f-date')+fld('数量（株）','f-qty','',NUMA)+'</div>'+fld('建単価','f-price','',NUMA)+
+      '<p class="note">総資産には建玉の総額ではなく、評価損益だけを加減します。</p>'+ERR+'<button class="btn pri">建玉を記録する</button></form>';
+  }else{
+    b='<form data-f="div"><input type="hidden" name="f-id" value="">'+fld('銘柄名','f-name','','list="dl-sec" autocomplete="off"')+'<datalist id="dl-sec">'+S.secs.map(function(s){return '<option value="'+esc(s.name)+'"></option>'}).join('')+'</datalist>'+
+      '<div class="g2">'+dateF('受取日','f-date')+fld('受取額（円）','f-amt','',NUMA)+'</div>'+ERR+'<button class="btn pri">配当を記録する</button></form>';
+  }
+  openSheet('取引を記録',tabs+b);
+}
+function sheetSec(id){
+  var s=S.secs.find(function(x){return x.id===id});if(!s)return;
+  var h=calc().H.find(function(x){return x.sec===s}),p=S.prices[pk(s)];
+  var b='<div class="box"><div class="kv"><span>保有</span><span class="r">'+qf(h.qty)+unitName(s)+'</span><span></span><span>取得額</span><span class="r">'+yen(h.cost)+'</span><span></span><span>評価額</span><span class="r">'+yen(h.value)+'</span><span class="r '+cls(h.pl)+'">'+(h.cost>0?pct(h.pl/h.cost*100):'')+'</span></div></div>';
+  b+='<form data-f="sec"><input type="hidden" name="f-id" value="'+s.id+'">'+fld(s.type==='fund'?'現在の基準価額（1万口あたり）':s.type==='jp'?'現在値（手入力で上書き）':'現在の評価単価','f-price',p?p.p:'',NUMA)+
+    '<p class="note">'+srcLabel(p)+'</p>'+
+    (s.type==='jp'?'<label class="ck" for="f-auto"><input type="checkbox" id="f-auto" name="f-auto"'+(s.auto?' checked':'')+'>株価を自動取得する</label>':'')+
+    fld('銘柄名','f-name',s.name,'autocomplete="off"')+
+    '<div class="g2">'+(s.type==='jp'?fld('銘柄コード','f-code',s.code,'autocapitalize="characters" autocomplete="off"'):'')+fld('証券会社','f-broker',s.broker,'list="dl-br" autocomplete="off"')+'</div>'+brokerList()+ERR+
+    '<button class="btn pri">保存する</button></form>';
+  b+='<button type="button" class="btn" data-a="record" data-k="buy">この画面を閉じて取引を記録</button>'+delBtn('delSec',s.id,'この銘柄と取引記録を削除する');
+  openSheet(esc((s.code?s.code+' ':'')+s.name),b);
+}
+function sheetTrade(id){
+  var t=S.trades.find(function(x){return x.id===id});if(!t)return;
+  var s=S.secs.find(function(x){return x.id===t.secId});
+  var b='<form data-f="trade"><input type="hidden" name="f-id" value="'+t.id+'">'+sel('売買','f-side',[['buy','買い'],['sell','売り']],t.side)+
+    '<div class="g2">'+dateF('約定日','f-date',t.date)+fld('数量','f-qty',t.qty,NUMA)+'</div><div class="g2">'+fld('単価','f-price',t.price,NUMA)+fld('手数料','f-fee',t.fee||0,NUMA)+'</div>'+ERR+'<button class="btn pri">保存する</button></form>'+delBtn('delTrade',t.id,'この取引を削除する');
+  openSheet('取引の修正 '+esc(s?s.name:''),b);
+}
+function sheetMargin(id){
+  var m=S.margins.find(function(x){return x.id===id});if(!m)return;
+  var p=S.prices[mk_(m)],b;
+  if(m.closed){
+    var pl=(m.closePrice-m.entry)*m.qty*dir(m);
+    b='<div class="box"><div class="kv"><span>'+(m.side==='long'?'買建':'売建')+' '+qf(m.qty)+'株</span><span class="r">建 '+fx2(m.entry)+'</span><span></span><span>決済 '+ys(m.closeDate)+'</span><span class="r">'+fx2(m.closePrice)+'</span><span></span><span>実現損益</span><span class="r '+cls(pl)+'">'+sgn(pl)+'</span><span></span></div></div>'+
+      '<button type="button" class="btn" data-a="reopen" data-id="'+m.id+'">決済を取り消して建玉に戻す</button>'+delBtn('delMargin',m.id,'この建玉の記録を削除する');
+  }else{
+    b='<form data-f="margin"><input type="hidden" name="f-id" value="'+m.id+'">'+fld('現在値（手入力で上書き）','f-price',p?p.p:'',NUMA)+'<p class="note">'+srcLabel(p)+'</p>'+
+      '<label class="ck" for="f-auto"><input type="checkbox" id="f-auto" name="f-auto"'+(m.auto!==false?' checked':'')+'>株価を自動取得する</label>'+
+      '<div class="g2">'+fld('銘柄名','f-name',m.name||'','autocomplete="off"')+fld('証券会社','f-broker',m.broker||'','list="dl-br" autocomplete="off"')+'</div>'+brokerList()+
+      '<div class="g2">'+fld('数量（株）','f-qty',m.qty,NUMA)+fld('建単価','f-entry',m.entry,NUMA)+'</div>'+ERR+'<button class="btn pri" name="go" value="save">保存する</button>'+
+      '<h2>決済</h2><div class="g2">'+dateF('決済日','f-cdate')+fld('決済単価','f-cprice','',NUMA)+'</div><button class="btn" name="go" value="close">決済を記録する</button></form>'+delBtn('delMargin',m.id,'この建玉を削除する');
+  }
+  openSheet(esc(m.code+' '+(m.name||''))+' '+(m.side==='long'?'買建':'売建'),b);
+}
+function sheetDiv(id){
+  var d=S.divs.find(function(x){return x.id===id});if(!d)return;
+  openSheet('配当の修正','<form data-f="div"><input type="hidden" name="f-id" value="'+d.id+'">'+fld('銘柄名','f-name',d.name,'autocomplete="off"')+'<div class="g2">'+dateF('受取日','f-date',d.date)+fld('受取額（円）','f-amt',d.amount,NUMA)+'</div>'+ERR+'<button class="btn pri">保存する</button></form>'+delBtn('delDiv',d.id));
+}
+var CURS=['JPY','USD','EUR','GBP','AUD','CAD','CHF','CNY','HKD','SGD','KRW'];
+function sheetCash(id){
+  var c=S.cash.find(function(x){return x.id===id})||{id:'',name:'',cur:'JPY',amount:''};
+  var f=S.fx[c.cur];
+  var b='<form data-f="cash"><input type="hidden" name="f-id" value="'+c.id+'">'+fld('口座名（例 A銀行 普通、財布）','f-name',c.name,'autocomplete="off"')+
+    '<div class="g2">'+sel('通貨','f-cur',CURS.map(function(x){return [x,x]}),c.cur)+fld('残高','f-amt',c.amount,NUMA)+'</div>'+
+    '<div id="fxbox"'+(c.cur==='JPY'?' hidden':'')+'>'+fld('為替レート（1通貨あたり何円か。空欄なら自動取得を試します）','f-rate',f?f.rate:'',NUMA)+'</div>'+ERR+'<button class="btn pri">保存する</button></form>'+(c.id?delBtn('delCash',c.id,'この口座を削除する'):'');
+  openSheet(c.id?'口座の修正':'口座を追加',b);
+}
+function sheetItem(id){
+  var i=S.items.find(function(x){return x.id===id})||{id:'',name:'',buyDate:'',buyPrice:'',value:'',memo:''};
+  var b='<form data-f="item"><input type="hidden" name="f-id" value="'+i.id+'">'+fld('品名','f-name',i.name,'autocomplete="off"')+
+    '<div class="g2">'+fld('購入日','f-bdate',i.buyDate||'','type="date"')+fld('購入額（円）','f-bprice',i.buyPrice,NUMA)+'</div>'+
+    fld('現在の時価（円）','f-value',i.value,NUMA)+(i.valueAt?'<p class="note">前回の時価更新 '+ys(i.valueAt)+'</p>':'')+fld('メモ（型番・保管場所など）','f-memo',i.memo||'','autocomplete="off"')+ERR+'<button class="btn pri">保存する</button></form>'+(i.id?delBtn('delItem',i.id,'この備品を削除する'):'');
+  openSheet(i.id?'備品の修正':'備品を追加',b);
+}
+function sheetHist(date){
+  var r=S.history.find(function(x){return x.date===date});
+  var b='<form data-f="hist"><input type="hidden" name="f-orig" value="'+(r?r.date:'')+'">'+dateF('記録日','f-date',r?r.date:ago(30))+fld('総資産（円）','f-total',r?r.total:'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>'+
+    (r&&r.manual&&r.date===today()?'<button type="button" class="btn" data-a="histAuto" data-id="'+r.date+'">今日の記録を自動計算に戻す</button>':'')+(r?delBtn('delHist',r.date,'この記録を削除する'):'');
+  openSheet(r?'記録の修正':'過去の記録を追加',b);
+}
+function sheetSettings(){
+  var b='<h2>目標資産額</h2><form data-f="target">'+fld('目標額（円）。0で非表示','f-target',S.settings.target||'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>';
+  b+='<h2>バックアップ</h2><p class="note">データはこのiPhoneの中だけにあります。機種変更やSafariのデータ消去に備えて、ときどき書き出して保管してください。</p>'+
+    '<button type="button" class="btn" data-a="export">バックアップを書き出す</button><div id="expbox" class="col" style="gap:10px" hidden><label class="fl" for="f-exp"><span>バックアップの中身（ファイル保存ができないときは、コピーしてメモ帳などに貼り付け）</span><textarea id="f-exp" readonly></textarea></label><button type="button" class="btn sec" data-a="copy">全文をコピーする</button></div>';
+  b+='<h2>バックアップから戻す</h2><form data-f="import"><label class="fl" for="f-file"><span>バックアップファイルを選ぶ</span><input type="file" id="f-file" accept=".json,application/json,text/plain"></label><label class="fl" for="f-imp"><span>または中身を貼り付け</span><textarea id="f-imp" name="f-imp"></textarea></label>'+ERR+'<button class="btn dgr" data-confirm="今のデータを置き換えます。もう一度押す">読み込んで置き換える</button></form>';
+  b+='<h2>データの消去</h2>'+delBtn('wipe','','すべてのデータを消去する')+'<p class="note">保存先：'+(storageOK?'このブラウザ内（端末の外には送信しません）':'保存できない環境です')+'<br>株価の自動取得では銘柄コードだけを外部の株価サイトと中継サービスに送ります。保有数や金額は送りません。</p>';
+  openSheet('設定・バックアップ',b);
+}
+
+/* ---------- form handlers (return error string or nothing) ---------- */
+var forms={
+  buy:function(v){
+    var qty=num(v['f-qty']),price=num(v['f-price']),fee=num(v['f-fee']);if(!(fee>=0))fee=0;
+    if(!(qty>0))return '数量を入力してください';if(!(price>=0))return '単価を入力してください';
+    var sec;
+    if(v['f-sec']==='__new'){
+      var type=v['f-type'],code=(v['f-code']||'').trim().toUpperCase(),name=(v['f-name']||'').trim(),broker=(v['f-broker']||'').trim();
+      if(type==='jp'&&!code)return '銘柄コードを入力してください';
+      if(type!=='jp'&&!name)return '銘柄名を入力してください';
+      sec=type==='jp'?S.secs.find(function(s){return s.type==='jp'&&String(s.code).toUpperCase()===code&&(s.broker||'')===broker}):null;
+      if(!sec){sec={id:uid(),type:type,code:type==='jp'?code:'',name:name||code,broker:broker,unit:type==='fund'?10000:1,auto:type==='jp'};S.secs.push(sec)}
+    }else sec=S.secs.find(function(s){return s.id===v['f-sec']});
+    if(!sec)return '銘柄を選んでください';
+    S.trades.push({id:uid(),secId:sec.id,date:v['f-date']||today(),side:'buy',qty:qty,price:price,fee:fee});
+    if(!S.prices[pk(sec)])S.prices[pk(sec)]={p:price,at:today(),src:'manual'};
+    ui.tab='sec';ui.secTab='pos';if(sec.auto)setTimeout(function(){updateAll(true)},50);
+  },
+  sell:function(v){
+    var qty=num(v['f-qty']),price=num(v['f-price']),fee=num(v['f-fee']);if(!(fee>=0))fee=0;
+    var h=calc().H.find(function(x){return x.sec.id===v['f-sec']});
+    if(!h)return '銘柄を選んでください';
+    if(!(qty>0))return '数量を入力してください';if(qty>h.qty+1e-9)return '保有数（'+Number(h.qty).toLocaleString('ja-JP')+'）を超えています';
+    if(!(price>=0))return '売却単価を入力してください';
+    S.trades.push({id:uid(),secId:h.sec.id,date:v['f-date']||today(),side:'sell',qty:qty,price:price,fee:fee});
+  },
+  trade:function(v){
+    var t=S.trades.find(function(x){return x.id===v['f-id']});if(!t)return '取引が見つかりません';
+    var qty=num(v['f-qty']),price=num(v['f-price']),fee=num(v['f-fee']);if(!(fee>=0))fee=0;
+    if(!(qty>0))return '数量を入力してください';if(!(price>=0))return '単価を入力してください';
+    t.side=v['f-side'];t.date=v['f-date']||t.date;t.qty=qty;t.price=price;t.fee=fee;
+  },
+  sec:function(v){
+    var s=S.secs.find(function(x){return x.id===v['f-id']});if(!s)return '銘柄が見つかりません';
+    var old=pk(s),name=(v['f-name']||'').trim();if(!name)return '銘柄名を入力してください';
+    if(s.type==='jp'){var code=(v['f-code']||'').trim().toUpperCase();if(!code)return '銘柄コードを入力してください';s.code=code;s.auto=!!v['f-auto']}
+    s.name=name;s.broker=(v['f-broker']||'').trim();
+    var k=pk(s);if(k!==old&&S.prices[old]&&!S.prices[k]){S.prices[k]=S.prices[old]}
+    var p=num(v['f-price']);
+    if(isFinite(p)&&p>=0&&(!S.prices[k]||S.prices[k].p!==p))S.prices[k]={p:p,at:today(),src:'manual'};
+  },
+  marginNew:function(v){
+    var code=(v['f-code']||'').trim().toUpperCase(),qty=num(v['f-qty']),price=num(v['f-price']);
+    if(!code)return '銘柄コードを入力してください';if(!(qty>0))return '数量を入力してください';if(!(price>0))return '建単価を入力してください';
+    S.margins.push({id:uid(),code:code,name:(v['f-name']||'').trim(),broker:(v['f-broker']||'').trim(),side:v['f-side'],qty:qty,entry:price,date:v['f-date']||today(),auto:true});
+    if(!S.prices[code])S.prices[code]={p:price,at:today(),src:'manual'};
+    ui.tab='sec';ui.secTab='pos';setTimeout(function(){updateAll(true)},50);
+  },
+  margin:function(v,sub){
+    var m=S.margins.find(function(x){return x.id===v['f-id']});if(!m)return '建玉が見つかりません';
+    if(sub==='close'){
+      var cp=num(v['f-cprice']);if(!(cp>0))return '決済単価を入力してください';
+      m.closed=true;m.closePrice=cp;m.closeDate=v['f-cdate']||today();return;
+    }
+    var qty=num(v['f-qty']),entry=num(v['f-entry']);
+    if(!(qty>0))return '数量を入力してください';if(!(entry>0))return '建単価を入力してください';
+    m.qty=qty;m.entry=entry;m.name=(v['f-name']||'').trim();m.broker=(v['f-broker']||'').trim();m.auto=!!v['f-auto'];
+    var p=num(v['f-price']),k=mk_(m);
+    if(isFinite(p)&&p>=0&&(!S.prices[k]||S.prices[k].p!==p))S.prices[k]={p:p,at:today(),src:'manual'};
+  },
+  div:function(v){
+    var name=(v['f-name']||'').trim(),amt=num(v['f-amt']);
+    if(!name)return '銘柄名を入力してください';if(!(amt>0))return '受取額を入力してください';
+    var d=S.divs.find(function(x){return x.id===v['f-id']});
+    if(d){d.name=name;d.amount=amt;d.date=v['f-date']||d.date}else S.divs.push({id:uid(),name:name,date:v['f-date']||today(),amount:amt});
+    ui.tab='sec';ui.secTab='div';
+  },
+  cash:function(v){
+    var name=(v['f-name']||'').trim(),amt=num(v['f-amt']),cur=v['f-cur'];
+    if(!name)return '口座名を入力してください';if(!isFinite(amt))return '残高を入力してください';
+    var c=S.cash.find(function(x){return x.id===v['f-id']});
+    if(c){c.name=name;c.cur=cur;c.amount=amt;c.at=today()}else S.cash.push({id:uid(),name:name,cur:cur,amount:amt,at:today()});
+    if(cur!=='JPY'){
+      var r=num(v['f-rate']);
+      if(r>0){if(!S.fx[cur]||S.fx[cur].rate!==r)S.fx[cur]={rate:r,at:today(),src:'manual'}}
+      else if(!S.fx[cur])setTimeout(function(){updateAll(true)},50);
+    }
+  },
+  item:function(v){
+    var name=(v['f-name']||'').trim(),bp=num(v['f-bprice']),val=num(v['f-value']);
+    if(!name)return '品名を入力してください';
+    if(!isFinite(bp))bp=0;if(!isFinite(val))val=bp;
+    if(val<0||bp<0)return '金額は0以上で入力してください';
+    var i=S.items.find(function(x){return x.id===v['f-id']});
+    if(i){if(i.value!==val)i.valueAt=today();i.name=name;i.buyDate=v['f-bdate']||'';i.buyPrice=bp;i.value=val;i.memo=(v['f-memo']||'').trim()}
+    else S.items.push({id:uid(),name:name,buyDate:v['f-bdate']||'',buyPrice:bp,value:val,valueAt:today(),memo:(v['f-memo']||'').trim()});
+  },
+  hist:function(v){
+    var date=v['f-date'],total=num(v['f-total']);
+    if(!date)return '記録日を入力してください';if(date>today())return '未来の日付は記録できません';if(!isFinite(total))return '総資産を入力してください';
+    var orig=v['f-orig'];
+    if(orig&&orig!==date)S.history=S.history.filter(function(h){return h.date!==orig});
+    var r=S.history.find(function(h){return h.date===date});
+    if(r){r.total=Math.round(total);r.manual=true}else S.history.push({date:date,total:Math.round(total),manual:true});
+    S.history.sort(function(a,b){return a.date<b.date?-1:1});
+  },
+  target:function(v){
+    var t=num(v['f-target']);if(!isFinite(t))t=0;if(t<0)return '0以上で入力してください';
+    S.settings.target=t;
+  },
+  'import':function(v){
+    var o;try{o=JSON.parse(v['f-imp'])}catch(e){return 'バックアップの中身を読み取れません。全文が貼り付けられているか確認してください'}
+    if(!o||o.v!==1||!Array.isArray(o.secs)||!Array.isArray(o.cash)||!Array.isArray(o.items))return 'このアプリのバックアップではないようです';
+    var b=blank();Object.keys(b).forEach(function(k){if(o[k]!=null)b[k]=o[k]});b.settings=Object.assign({target:0,hide:false},o.settings||{});S=b;
+  }
+};
+
+/* ---------- actions ---------- */
+function toast(msg){var t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){t.hidden=true},2600)}
+function done(msg){save();closeSheet();render();toast(msg||'保存しました')}
+var acts={
+  tab:function(d){ui.tab=d.k;render()},
+  secTab:function(d){ui.secTab=d.k;render()},
+  range:function(d){ui.range=d.k;render()},
+  hide:function(){S.settings.hide=!S.settings.hide;save();render()},
+  settings:function(){sheetSettings()},
+  update:function(){updateAll(false)},
+  close:function(){closeSheet()},
+  record:function(d){sheetRecord(d.k||'buy')},
+  sec:function(d){sheetSec(d.id)},
+  trade:function(d){sheetTrade(d.id)},
+  margin:function(d){sheetMargin(d.id)},
+  div:function(d){sheetDiv(d.id)},
+  cash:function(d){sheetCash(d.id)},
+  item:function(d){sheetItem(d.id)},
+  hist:function(d){sheetHist(d.id)},
+  clearSample:function(){S=blank();ui.msg='';done('サンプルを消しました。自分のデータを入力できます')},
+  delSec:function(d){S.secs=S.secs.filter(function(x){return x.id!==d.id});S.trades=S.trades.filter(function(t){return t.secId!==d.id});done('削除しました')},
+  delTrade:function(d){S.trades=S.trades.filter(function(x){return x.id!==d.id});done('削除しました')},
+  delMargin:function(d){S.margins=S.margins.filter(function(x){return x.id!==d.id});done('削除しました')},
+  reopen:function(d){var m=S.margins.find(function(x){return x.id===d.id});if(m){delete m.closed;delete m.closePrice;delete m.closeDate}done('建玉に戻しました')},
+  delDiv:function(d){S.divs=S.divs.filter(function(x){return x.id!==d.id});done('削除しました')},
+  delCash:function(d){S.cash=S.cash.filter(function(x){return x.id!==d.id});done('削除しました')},
+  delItem:function(d){S.items=S.items.filter(function(x){return x.id!==d.id});done('削除しました')},
+  delHist:function(d){S.history=S.history.filter(function(x){return x.date!==d.id});done('削除しました')},
+  histAuto:function(d){var r=S.history.find(function(x){return x.date===d.id});if(r)delete r.manual;done('自動計算に戻しました')},
+  wipe:function(){S=blank();ui.msg='';done('すべて消去しました')},
+  'export':function(){
+    var txt=JSON.stringify(S),name='shisan-backup-'+today()+'.json';
+    $('#expbox').hidden=false;$('#f-exp').value=txt;
+    try{
+      var file=new File([txt],name,{type:'application/json'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:name}).catch(function(){});return}
+      var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+    }catch(e){}
+  },
+  copy:function(){
+    var ta=$('#f-exp');
+    var fb=function(){ta.focus();ta.select();toast('選択しました。コピーを押してください')};
+    try{navigator.clipboard.writeText(ta.value).then(function(){toast('コピーしました')},fb)}catch(e){fb()}
+  }
+};
+function armed(el){
+  if(!el.dataset.confirm||el.dataset.armed)return true;
+  el.dataset.armed='1';el.dataset.label=el.textContent;el.textContent=el.dataset.confirm;
+  setTimeout(function(){if(el.isConnected){delete el.dataset.armed;el.textContent=el.dataset.label}},4000);
+  return false;
+}
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-a]');if(!el||el.disabled)return;
+  if(!armed(el))return;
+  var f=acts[el.dataset.a];if(f)f(el.dataset);
+});
+document.addEventListener('submit',function(e){
+  var form=e.target.closest('form[data-f]');if(!form)return;
+  e.preventDefault();
+  var sb=e.submitter;
+  if(sb&&!armed(sb))return;
+  var v={};new FormData(form).forEach(function(val,k){if(typeof val==='string')v[k]=val});
+  var err=forms[form.dataset.f](v,sb?sb.value:'');
+  var box=form.querySelector('.err');
+  if(err){if(box){box.textContent=err;box.hidden=false}return}
+  done(form.dataset.f==='import'?'バックアップを読み込みました':'保存しました');
+});
+document.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.id==='f-sec'&&$('#newsec'))$('#newsec').hidden=t.value!=='__new';
+  if(t.id==='f-cur'&&$('#fxbox')){$('#fxbox').hidden=t.value==='JPY';var f=S.fx[t.value];$('#f-rate').value=f?f.rate:''}
+  if(t.id==='f-file'&&t.files&&t.files[0]){var r=new FileReader();r.onload=function(){$('#f-imp').value=String(r.result||'')};r.readAsText(t.files[0])}
+});
+
+/* ---------- boot ---------- */
+S=load();
+save();
+render();
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){})}catch(e){}
+try{if('serviceWorker' in navigator&&document.querySelector('link[rel=manifest]'))navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}
+if(!S.lastFetch||Date.now()-S.lastFetch>30*60*1000)setTimeout(function(){
+  var C=calc();
+  var need=C.held.some(function(h){return h.sec.type==='jp'&&h.sec.auto})||C.M.some(function(x){return x.m.auto!==false})||S.cash.some(function(c){return c.cur!=='JPY'&&!S.sample});
+  if(need)updateAll(true);
+},400);
+document.addEventListener('visibilitychange',function(){if(!document.hidden){save();render()}});
+})();
+</script>
+</body>
+</html>
