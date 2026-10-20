@@ -229,18 +229,23 @@ function prevMonthRec(){
 }
 
 /* ---------- price / fx fetch ---------- */
-var PROX=[function(u){return u},function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u)},function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},function(u){return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)}];
+var PROX=[function(u){return u},function(u){return 'https://r.jina.ai/'+u},function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u)},function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},function(u){return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)}];
 var goodProx=null;
-function getJSON(url,ms){
+function getText(url,ms){
   var c=new AbortController(),t=setTimeout(function(){c.abort()},ms||6000);
-  return fetch(url,{signal:c.signal,cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()}).finally(function(){clearTimeout(t)});
+  return fetch(url,{signal:c.signal,cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text()}).finally(function(){clearTimeout(t)});
+}
+function getJSON(url,ms){return getText(url,ms).then(function(t){return JSON.parse(t)})}
+function pickJSON(t){
+  var i=t.indexOf('{"chart"');if(i<0)i=t.indexOf('{');if(i<0)throw new Error('no json');
+  try{return JSON.parse(t.slice(i))}catch(e){return JSON.parse(t.slice(i,t.lastIndexOf('}')+1))}
 }
 async function quoteJP(code){
   var u='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(code)+'.T?interval=1d&range=1d';
-  var order=goodProx!=null?[goodProx]:[1,2,3,0];
+  var order=goodProx!=null?[goodProx]:[1,2,3,4,0];
   for(var k=0;k<order.length;k++){
     try{
-      var j=await getJSON(PROX[order[k]](u));
+      var j=pickJSON(await getText(PROX[order[k]](u),order[k]===1?12000:6000));
       var m=j&&j.chart&&j.chart.result&&j.chart.result[0]&&j.chart.result[0].meta;
       if(m&&isFinite(m.regularMarketPrice)){goodProx=order[k];return {p:m.regularMarketPrice,name:m.shortName||m.longName||''}}
     }catch(e){}
@@ -268,7 +273,7 @@ async function fetchStocks(){
     if(q){S.prices[codes[i]]={p:q.p,at:today(),src:'auto'};ok++;
       S.secs.forEach(function(s){if(pk(s)===codes[i]&&(!s.name||s.name===s.code)&&q.name)s.name=q.name});
       S.margins.forEach(function(m){if(mk_(m)===codes[i]&&!m.name&&q.name)m.name=q.name});
-    }else if(i===0&&goodProx==null)break;
+    }else if(goodProx==null)break;
   }
   return {n:codes.length,ok:ok};
 }
