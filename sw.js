@@ -1,7 +1,7 @@
-const CACHE='shisan-v4';
+const CACHE='shisan-v6';
 const FILES=['./','index.html','manifest.webmanifest','icon-180.png','icon-512.png'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:'reload'})))).then(()=>self.skipWaiting()))});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE&&k.indexOf('shisan-')===0).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{
   const req=e.request,u=new URL(req.url);
   if(req.method!=='GET'||u.origin!==location.origin)return;
