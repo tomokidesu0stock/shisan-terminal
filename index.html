@@ -177,13 +177,16 @@ var stamp=function(ms){if(!ms)return '未取得';var d=new Date(ms);return (d.ge
 
 /* ---------- state ---------- */
 function defSet(o){return Object.assign({target:0,hide:false,lastBackup:null,snooze:null},o||{})}
-function blank(){return {v:1,sample:false,settings:defSet(),fund:{name:'',ev:[]},cash:[],fx:{},items:[],debts:[],history:[],lastFetch:null}}
+function blank(){return {v:1,sample:false,settings:defSet(),funds:[],cash:[],fx:{},items:[],debts:[],history:[],lastFetch:null}}
 function sample(){
   var s=blank(),t=today(),y=new Date().getFullYear();
   s.sample=true;s.settings.target=20000000;
-  s.fund.name='サンプル・ファンド';
+  var fa={id:uid(),name:'A証券',ev:[]},fb={id:uid(),name:'B証券',ev:[]};s.funds.push(fa,fb);
   [['in',ago(700),5000000,0],['aum',ago(500),0,5450000],['in',ago(360),1000000,5600000],['aum',ago(200),0,6300000],['out',ago(90),300000,6700000],['aum',ago(3),0,7100000]].forEach(function(a){
-    s.fund.ev.push({id:uid(),date:a[1],kind:a[0],amount:a[2],aum:a[3]});
+    fa.ev.push({id:uid(),date:a[1],kind:a[0],amount:a[2],aum:a[3]});
+  });
+  [['in',ago(400),2000000,0],['aum',ago(150),0,2180000],['aum',ago(5),0,2350000]].forEach(function(a){
+    fb.ev.push({id:uid(),date:a[1],kind:a[0],amount:a[2],aum:a[3]});
   });
   [['A銀行 普通','JPY',2000000,3],['B銀行 定期','JPY',1500000,13],['財布・手元現金','JPY',50000,0],['電子マネー','JPY',30000,0],['C銀行 外貨普通','USD',6000,5],['手元の外貨','EUR',125,30]].forEach(function(a){
     s.cash.push({id:uid(),name:a[0],cur:a[1],amount:a[2],at:ago(a[3])});
@@ -193,7 +196,7 @@ function sample(){
     s.items.push({id:uid(),name:a[0],buyDate:ago(a[1]),buyPrice:a[2],value:a[3],valueAt:ago(a[4]),memo:''});
   });
   [['自動車ローン',1200000,6],['クレジットカード',85000,2]].forEach(function(a){s.debts.push({id:uid(),name:a[0],amount:a[1],at:ago(a[2])})});
-  var now=new Date(),tot=[9850000,10120000,10480000,10350000,10937222];
+  var now=new Date(),tot=[12200000,12470000,12830000,12700000,13287222];
   for(var i=5;i>=1;i--){s.history.push({date:ymd(new Date(now.getFullYear(),now.getMonth()-i+1,0)),total:tot[5-i]})}
   return s;
 }
@@ -213,10 +216,17 @@ function normalize(o){
   var st=defSet(obj(o.settings));
   b.settings={target:Math.max(0,nz(st.target)),hide:st.hide===true||st.hide==='true'||st.hide===1,lastBackup:ts(st.lastBackup),snooze:ts(st.snooze,8*864e5)};
   var U=uniq();
-  var fo=obj(o.fund);b.fund={name:String(fo.name==null?'':fo.name).slice(0,40),ev:arr(fo.ev).map(function(e){
+  var normEv=function(evs){return arr(evs).map(function(e){
     var kind=['aum','in','out'].indexOf(e.kind)>=0?e.kind:null;
     return kind?{id:U(e.id),date:dt(e.date,t),kind:kind,amount:kind==='aum'?0:Math.max(0,nz(e.amount)),aum:Math.max(0,nz(e.aum))}:null;
   }).filter(function(e){return e&&(e.kind==='aum'||e.amount>0)})};
+  var fl=Array.isArray(o.funds)?arr(o.funds):[],names={};
+  if(!Array.isArray(o.funds)){var fo=obj(o.fund);if(arr(fo.ev).length)fl=[{name:fo.name||'証券会社1',ev:fo.ev}]}
+  b.funds=fl.map(function(f,i){
+    var nm=String(f.name==null?'':f.name).trim().slice(0,40)||'証券会社'+(i+1),base=nm,k=2;
+    while(names[nm])nm=base+' ('+(k++)+')';names[nm]=1;
+    return {id:U(f.id),name:nm,ev:normEv(f.ev)};
+  });
   b.cash=arr(o.cash).map(function(c){var cur=String(c.cur||'JPY').toUpperCase();return {id:U(c.id),name:String(c.name||''),cur:/^[A-Z]{3}$/.test(cur)?cur:'JPY',amount:nz(c.amount),at:dt(c.at,t)}});
   b.items=arr(o.items).map(function(i){return {id:U(i.id),name:String(i.name||''),buyDate:dt(i.buyDate,'','1900-01-01'),buyPrice:nz(i.buyPrice),value:nz(i.value),valueAt:dt(i.valueAt,t),memo:String(i.memo||'')}});
   b.debts=arr(o.debts).map(function(d){return {id:U(d.id),name:String(d.name||''),amount:Math.max(0,nz(d.amount)),at:dt(d.at,t)}});
@@ -259,7 +269,8 @@ function save(){
 function calc(){
   var sum=function(a,f){return a.reduce(function(x,y){return x+f(y)},0)};
   var cash=S.cash.map(function(c){var rate=c.cur==='JPY'?1:(S.fx[c.cur]?S.fx[c.cur].rate:null);return {c:c,rate:rate,jpy:rate==null?0:c.amount*rate}});
-  var C={cash:cash,F:fundCalc(S.fund.ev)};
+  var FS=S.funds.map(function(f){return {f:f,F:fundCalc(f.ev)}});
+  var C={cash:cash,FS:FS,F:{aum:sum(FS,function(x){return x.F.aum}),net:sum(FS,function(x){return x.F.net}),inv:sum(FS,function(x){return x.F.inv}),red:sum(FS,function(x){return x.F.red})}};
   C.secTotal=C.F.aum;
   C.cashVal=sum(cash,function(x){return x.jpy});
   C.itemsVal=sum(S.items,function(i){return i.value||0});C.itemsCost=sum(S.items,function(i){return i.buyPrice||0});
@@ -329,7 +340,7 @@ async function fetchFX(g0){
   if(rates)curs.forEach(function(c){if(rates[c]>0){S.fx[c]={rate:Number((1/rates[c]).toPrecision(6)),at:today(),src:'auto'};ok++}});
   return {n:curs.length,ok:ok};
 }
-function hasData(){return !!(S.fund.ev.length||S.cash.length||S.items.length||S.debts.length)}
+function hasData(){return !!(S.funds.length||S.cash.length||S.items.length||S.debts.length)}
 function backupDue(){
   if((S.sample&&!S.sampleEdited)||!storageOK||!hasData())return false;
   var st=S.settings,now=Date.now();
@@ -422,22 +433,52 @@ function viewSum(C){
   o+='<div class="kv4">'+parts.map(function(p){return '<i class="sw" style="background:'+p[2]+'"></i><span>'+p[0]+'</span><span class="r">'+yen(p[1])+'</span><span class="r am">'+(tot>0?((Math.round(p[1]/tot*1000)/10)+0).toFixed(1)+'%':'—')+'</span>'}).join('')+'</div></section>';
   var F=C.F,fpl=F.aum-F.net;
   o+='<section class="col" style="gap:8px"><div class="lb">ファンド FUND</div>';
-  if(!F.last)o+='<button type="button" class="btn sec" data-a="tab" data-k="sec">ファンドを設定する</button>';
-  else o+='<div class="box"><div class="kv"><span>出資金額</span><span class="r">'+yen(F.net)+'</span><span></span><span>評価額 AUM</span><span class="r">'+yen(F.aum)+'</span><span></span><span>運用損益</span><span class="r '+cls(fpl)+'">'+sgn(fpl)+'</span><span class="r '+cls(fpl)+'">'+(F.net>0?pct(fpl/F.net*100):'')+'</span><span>基準価額</span><span class="r">'+navStr(F)+'</span><span class="r '+cls(F.since)+'">'+pct(F.since)+'</span><span>'+F.ytdLabel+'</span><span></span><span class="r '+cls(F.ytd)+'">'+pct(F.ytd)+'</span></div></div>';
+  if(!S.funds.length)o+='<button type="button" class="btn sec" data-a="tab" data-k="sec">ファンドを設定する</button>';
+  else{
+    o+='<div class="box"><div class="kv"><span>出資金額</span><span class="r">'+yen(F.net)+'</span><span></span><span>評価額 AUM</span><span class="r">'+yen(F.aum)+'</span><span></span><span>運用損益</span><span class="r '+cls(fpl)+'">'+sgn(fpl)+'</span><span class="r '+cls(fpl)+'">'+(F.net>0?pct(fpl/F.net*100):'')+'</span></div></div>';
+    o+='<div class="list"><div class="gh c3"><span>証券会社</span><span class="r">AUM</span><span class="r">基準価額 設定来</span></div>';
+    C.FS.forEach(function(x){o+='<button type="button" class="it c3" data-a="fopen" data-id="'+esc(x.f.id)+'"><span class="n">'+esc(x.f.name)+'</span><span class="r">'+yen(x.F.aum)+'</span><span class="r '+cls(x.F.since)+'">'+(x.F.last?pct(x.F.since):'—')+'</span></button>'});
+    o+='</div>';
+  }
   o+='</section>';
   if(hasData())o+='<button type="button" class="btn sec" data-a="stock">棚卸し（残高・時価をまとめて更新）</button>';
   o+='<div class="note">為替の自動取得 '+stamp(S.lastFetch)+(ui.msg?'<br>'+esc(ui.msg):'')+'</div>';
   return o;
 }
 
+function curFund(){return S.funds.find(function(f){return f.id===ui.fund})||null}
 function viewSec(C){
+  var fd=curFund();
+  if(fd)return viewFund(C.FS.find(function(x){return x.f===fd}));
+  ui.fund=null;
   var F=C.F,o='',fpl=F.aum-F.net;
-  if(F.err)o+='<div class="box warn">記録に矛盾があります：'+esc(F.err)+'。下の記録から日付や金額を確認してください（矛盾より後の記録は計算に入っていません）。</div>';
-  if(!S.fund.ev.length){
-    o+='<div class="empty">まだファンドがありません。<br>自分が自分のファンドに出資する形で記録します。<br>最初の出資金額と、今の評価額（AUM）を入れてください。</div><div class="add"><button type="button" class="btn pri" data-a="fundInit">ファンドを設定する</button></div>';
+  if(!S.funds.length){
+    o+='<div class="empty">まだファンドがありません。<br>証券会社ごとに、自分が自分のファンドに出資する形で記録します。<br>最初の出資金額と、今の評価額（AUM）を入れてください。</div><div class="add"><button type="button" class="btn pri" data-a="fundInit">証券会社を追加する</button></div>';
     return o;
   }
-  o+='<div class="list"><div class="gh hot"><span>'+esc(S.fund.name||'MY FUND')+'</span><span>'+(F.start?'設定日 '+ys(F.start):'')+'</span></div></div>';
+  o+='<div class="row2"><div class="col"><span class="lb">評価額 AUM 合計</span><span class="mid">'+yen(F.aum)+'</span></div><div class="col e '+cls(fpl)+'"><span>'+arrow(fpl)+sgn(fpl)+'</span><span>'+(F.net>0?pct(fpl/F.net*100):'')+'</span></div></div>';
+  o+='<div class="box"><div class="kv">';
+  o+='<span>出資金額</span><span class="r">'+yen(F.net)+'</span><span></span>';
+  o+='<span class="dim">　出資累計</span><span class="r dim">'+yen(F.inv)+'</span><span></span>';
+  o+='<span class="dim">　払戻累計</span><span class="r dim">'+yen(F.red)+'</span><span></span>';
+  o+='<span>出資倍率</span><span class="r">'+(F.net>0?(F.aum/F.net).toFixed(2)+'倍':'—')+'</span><span></span>';
+  o+='</div></div>';
+  var bad=C.FS.filter(function(x){return x.F.err}),old=C.FS.filter(function(x){return x.F.units>0&&aumAge(x.F)>=30});
+  if(bad.length)o+='<div class="box warn">記録に矛盾があります：'+esc(bad.map(function(x){return x.f.name}).join('、'))+'。証券会社をタップして記録を確認してください。</div>';
+  if(old.length)o+='<div class="box att"><p>評価額の更新が30日以上前の証券会社があります：'+esc(old.map(function(x){return x.f.name}).join('、'))+'</p><button type="button" class="btn pri" data-a="aumAll">評価額をまとめて更新</button></div>';
+  o+='<div class="list"><div class="gh"><span>証券会社</span><span>AUM ／ 運用損益</span></div>';
+  C.FS.forEach(function(x){var G=x.F,pl=G.aum-G.net;
+    o+='<button type="button" class="it" data-a="fopen" data-id="'+esc(x.f.id)+'"><span class="n">'+esc(x.f.name)+(G.err?' <span class="dn">矛盾</span>':'')+'</span><span class="r">'+yen(G.aum)+'</span><span class="pl '+cls(pl)+'">'+sgn(pl)+'</span>';
+    o+='<span class="s">出資 '+yen(G.net)+' ／ 基準価額 '+navStr(G)+' '+(G.last?pct(G.since):'')+' ／ '+G.ytdLabel+' '+(G.last?pct(G.ytd):'—')+' ／ '+(G.last?ys(G.last)+' 時点':'未評価')+'</span></button>'});
+  o+='</div><div class="note">基準価額・騰落率は証券会社ごとに計算します（1万口あたり、設定時10,000円）。行をタップすると記録の入力・修正ができます</div>';
+  o+='<div class="add"><button type="button" class="btn" data-a="fundInit">＋ 証券会社を追加</button></div>';
+  return o;
+}
+function viewFund(x){
+  var fd=x.f,F=x.F,o='',fpl=F.aum-F.net;
+  o+='<button type="button" class="btn sec" data-a="fback">← 証券会社の一覧へ</button>';
+  if(F.err)o+='<div class="box warn">記録に矛盾があります：'+esc(F.err)+'。下の記録から日付や金額を確認してください（矛盾より後の記録は計算に入っていません）。</div>';
+  o+='<div class="list"><div class="gh hot"><span>'+esc(fd.name)+'</span><span>'+(F.start?'設定日 '+ys(F.start):'')+'</span></div></div>';
   o+='<div class="row2"><div class="col"><span class="lb">評価額 AUM</span><span class="mid">'+yen(F.aum)+'</span><span class="note">'+(F.last?ys(F.last)+' 時点':'')+'</span></div><div class="col e '+cls(fpl)+'"><span>'+arrow(fpl)+sgn(fpl)+'</span><span>'+(F.net>0?pct(fpl/F.net*100):'')+'</span></div></div>';
   var age=aumAge(F);
   if(F.units>0&&age>=30)o+='<div class="box att"><p>評価額の更新が'+age+'日前です。証券会社アプリの資産合計を入れてください。</p><button type="button" class="btn pri" data-a="fund" data-k="aum">評価額を更新</button></div>';
@@ -452,13 +493,14 @@ function viewSec(C){
   o+='</div></div>';
   o+='<div class="note">出資金額＝出資累計−払戻累計。基準価額は1万口あたりで設定時を10,000円とし、出資・払い戻しの影響を除いた運用成績です。出資金額との差（運用損益）は入出金に左右されます。</div>';
   o+='<div class="btnrow"><button type="button" class="btn" data-a="fund" data-k="in">＋ 追加出資</button><button type="button" class="btn" data-a="fund" data-k="out">− 払い戻し</button></div>';
-  var tags={aum:['評価','dim'],'in':['出資','cy'],out:['払戻','am']},nv=navSeries(S.fund.ev);
-  var L=S.fund.ev.map(function(e,i){return [e,i]}).sort(function(a,b){return a[0].date<b[0].date?1:a[0].date>b[0].date?-1:b[1]-a[1]}).map(function(x){return x[0]});
+  var tags={aum:['評価','dim'],'in':['出資','cy'],out:['払戻','am']},nv=navSeries(fd.ev);
+  var L=fd.ev.map(function(e,i){return [e,i]}).sort(function(a,b){return a[0].date<b[0].date?1:a[0].date>b[0].date?-1:b[1]-a[1]}).map(function(x){return x[0]});
   o+='<div class="list"><div class="gh"><span>記録 HISTORY</span><span>金額</span></div>';
   L.forEach(function(e){var tg=tags[e.kind],n=nv[e.id];
     o+='<button type="button" class="it" data-a="fev" data-id="'+esc(e.id)+'"><span class="n"><span class="tag '+tg[1]+'">'+tg[0]+'</span>'+(e.kind==='aum'?'評価額 AUM':e.kind==='in'?'追加出資':'払い戻し')+'</span><span></span><span class="pl">'+(e.kind==='aum'?yen(e.aum):(e.kind==='in'?'+':'-')+yen(e.amount))+'</span>';
     o+='<span class="s">'+ys(e.date)+(e.kind!=='aum'&&n&&n.before?' ／ 直前AUM '+yen(e.aum):'')+(n?' ／ 基準価額 '+f0(n.nav*10000):'')+'</span></button>'});
   o+='</div><div class="note">行をタップすると修正・削除できます</div>';
+  o+='<button type="button" class="btn sec" data-a="fedit">証券会社名の変更・削除</button>';
   o+='<div class="add"><button type="button" class="btn pri" data-a="fund" data-k="aum">評価額（AUM）を更新</button></div>';
   return o;
 }
@@ -537,11 +579,11 @@ function viewHist(C){
 }
 
 function render(){
-  var C=calc(),t=TABS.find(function(x){return x[0]===ui.tab}),main=$('#main'),keep=main.dataset.tab===ui.tab+ui.secTab?main.scrollTop:0;
+  var C=calc(),t=TABS.find(function(x){return x[0]===ui.tab}),main=$('#main'),keep=main.dataset.tab===ui.tab+(ui.fund||'')?main.scrollTop:0;
   $('#ttl').textContent=t[2];
   var hb='';
   if(ui.tab==='sum')hb='<button type="button" data-a="hide" aria-pressed="'+S.settings.hide+'">'+(S.settings.hide?'金額を表示':'金額を隠す')+'</button><button type="button" data-a="settings">設定</button>';
-  if(ui.tab==='sec'&&C.F.units>0)hb='<button type="button" data-a="fund" data-k="aum">AUM更新</button>';
+  if(ui.tab==='sec'){var cf=curFund();if(cf){if(fundCalc(cf.ev).units>0)hb='<button type="button" data-a="fund" data-k="aum">AUM更新</button>'}else if(S.funds.length)hb='<button type="button" data-a="aumAll">AUM一括更新</button>'}
   if(ui.tab==='cash')hb='<button type="button" data-a="update"'+(busy?' disabled':'')+'>'+(busy?'更新中…':'為替を更新')+'</button>';
   if(ui.tab==='hist')hb='<button type="button" data-a="settings">バックアップ</button>';
   $('#hb').innerHTML=hb;
@@ -552,7 +594,7 @@ function render(){
   sub.hidden=!st;sub.innerHTML=st?st.join(''):'';
   main.innerHTML={sum:viewSum,sec:viewSec,cash:viewCash,items:viewItems,debt:viewDebt,hist:viewHist}[ui.tab](C);
   main.querySelectorAll('.big,.mid').forEach(function(el){el.style.setProperty('--n',Math.max(8,el.textContent.length))});
-  main.dataset.tab=ui.tab+ui.secTab;main.scrollTop=keep;
+  main.dataset.tab=ui.tab+(ui.fund||'');main.scrollTop=keep;
   $('#nav').innerHTML=TABS.map(function(x,i){return '<button type="button" data-a="tab" data-k="'+x[0]+'"'+(x[0]===ui.tab?' aria-current="page"':'')+'><small>'+(i+1)+'</small><span>'+x[1]+'</span></button>'}).join('');
 }
 
@@ -599,35 +641,48 @@ function dateErr(v){
   return null;
 }
 function changed(v,k){return String(v[k]==null?'':v[k]).trim()!==String(ui.orig&&ui.orig[k]!=null?ui.orig[k]:'').trim()}
-function fundEvOf(id){return S.fund.ev.find(function(x){return x.id===id})}
-function unitsBefore(e){var L=sortTrades(S.fund.ev),i=L.indexOf(e);return fundCalc(i<0?L:L.slice(0,i)).units}
+function fundEvOf(fd,id){return fd.ev.find(function(x){return x.id===id})}
+function unitsBefore(fd,e){var L=sortTrades(fd.ev),i=L.indexOf(e);return fundCalc(i<0?L:L.slice(0,i)).units}
 function sheetFund(kind,id){
-  var e=id?fundEvOf(id):null;if(id&&!e)return;
+  var fd=curFund();if(!fd)return;
+  var e=id?fundEvOf(fd,id):null;if(id&&!e)return;
   if(e)kind=e.kind;
-  if(!S.fund.ev.length&&!e){sheetFundInit();return}
-  var F=calc().F,b='';
+  var F=fundCalc(fd.ev),b='';
   if(!e)b+='<div class="subt">'+[['aum','評価額 AUM'],['in','追加出資'],['out','払い戻し']].map(function(x){return '<button type="button" data-a="fund" data-k="'+x[0]+'" aria-pressed="'+(x[0]===kind)+'">'+x[1]+'</button>'}).join('')+'</div>';
-  b+='<form data-f="fund"><input type="hidden" name="f-id" value="'+esc(e?e.id:'')+'"><input type="hidden" name="f-kind" value="'+kind+'">';
+  b+='<form data-f="fund"><input type="hidden" name="f-fund" value="'+esc(fd.id)+'"><input type="hidden" name="f-id" value="'+esc(e?e.id:'')+'"><input type="hidden" name="f-kind" value="'+kind+'">';
   if(kind==='aum'){
     b+='<div class="g2">'+dateF('評価日','f-date',e?e.date:today())+fld('評価額 AUM（円）','f-aum',e?e.aum:'',NUMA)+'</div>'+
-      '<p class="note">証券会社アプリの資産合計（口座内の現金・信用取引の損益を含む金額）を入れてください。'+(!e&&F.last?'前回 '+ys(F.last)+' 時点 '+yen(F.aum)+'。':'')+'</p>';
+      '<p class="note">'+esc(fd.name)+'のアプリの資産合計（口座内の現金・信用取引の損益を含む金額）を入れてください。'+(!e&&F.last?'前回 '+ys(F.last)+' 時点 '+yen(F.aum)+'。':'')+'</p>';
   }else{
-    var show=e?unitsBefore(e)>0:F.units>0,lbl=kind==='in'?'出資':'払い戻し';
+    var show=e?unitsBefore(fd,e)>0:F.units>0,lbl=kind==='in'?'出資':'払い戻し';
     b+='<div class="g2">'+dateF(kind==='in'?'出資日':'払い戻し日','f-date',e?e.date:today())+fld(lbl+'額（円）','f-amt',e?e.amount:'',NUMA)+'</div>';
     b+=show?fld(lbl+'する直前の評価額 AUM（円）','f-aum',e?e.aum:Math.round(F.aum),NUMA)+'<input type="hidden" name="f-show" value="1"><p class="note">基準価額（口数の発行・解約の値段）を決めるのに使います。前回の評価額が入っているので、変わっていれば今の金額に直してください。</p>':'<input type="hidden" name="f-aum" value="0">';
     b+='<p class="note">'+(kind==='in'?'出資したお金は、現預金タブの元の口座残高から自分で減らしてください（二重計上を防ぐため）。':'払い戻したお金は、現預金タブの受け取った口座の残高に自分で反映してください。')+'</p>';
   }
   b+=ERR+'<button class="btn pri">'+(e?'保存する':kind==='aum'?'評価額を記録する':lbl+'を記録する')+'</button></form>';
   if(e)b+=delBtn('delFev',e.id,'この記録を削除する');
-  openSheet(e?'記録の修正':'ファンドの記録',b);
+  openSheet(esc(fd.name)+' '+(e?'記録の修正':'の記録'),b);
 }
+function brokerOpts(){var b={},o='';S.funds.forEach(function(f){b[f.name]=1});['SBI証券','楽天証券','マネックス証券','松井証券','auカブコム証券','SMBC日興証券','野村證券','大和証券','みずほ証券','岡三証券','GMOクリック証券','PayPay証券','moomoo証券','ウィブル証券','DMM.com証券','iDeCo','企業型DC'].forEach(function(n){if(!b[n])o+='<option value="'+esc(n)+'"></option>'});return '<datalist id="dl-br">'+o+'</datalist>'}
 function sheetFundInit(){
-  var b='<form data-f="fundInit">'+fld('ファンド名（空欄可）','f-name',S.fund.name||'','autocomplete="off" placeholder="例 MY FUND"')+
+  var b='<form data-f="fundInit">'+fld('証券会社名','f-name','','autocomplete="off" list="dl-br" placeholder="例 SBI証券"')+brokerOpts()+
     '<div class="g2">'+dateF('設定日（最初に出資した日）','f-date',today())+fld('最初の出資額（円）','f-amt','',NUMA)+'</div>'+
     fld('今の評価額 AUM（円）。空欄なら出資額と同じ','f-now','',NUMA)+
     '<p class="note">設定日の基準価額を10,000円（1万口あたり）として、出資額と同じ口数を発行します。設定日より後に評価額が変わっていれば、今日の評価額として記録します。</p>'+
-    ERR+'<button class="btn pri">ファンドを設定する</button></form>';
-  openSheet('ファンドを設定',b);
+    ERR+'<button class="btn pri">証券会社を追加する</button></form>';
+  openSheet('証券会社を追加',b);
+}
+function sheetFedit(){
+  var fd=curFund();if(!fd)return;
+  var b='<form data-f="fname"><input type="hidden" name="f-fund" value="'+esc(fd.id)+'">'+fld('証券会社名','f-name',fd.name,'autocomplete="off"')+ERR+'<button class="btn pri">保存する</button></form>'+
+    '<p class="note">削除すると、この証券会社の出資・払い戻し・評価額の記録がすべて消えます。</p>'+delBtn('delFund',fd.id,'この証券会社を削除する');
+  openSheet('証券会社の設定',b);
+}
+function sheetAumAll(){
+  var b='<form data-f="aumAll">'+dateF('評価日','f-date',today())+'<p class="note">金額を書き換えた証券会社だけ、この評価日で記録します。全部を確認済みにしたいときは総合画面の「棚卸し」を使ってください。</p>',n=0;
+  calc().FS.forEach(function(x){if(x.F.units>0&&!x.F.err){n++;b+=fld(esc(x.f.name)+'　前回 '+ys(x.F.last),'f-a-'+x.f.id,Math.round(x.F.aum),NUMA)}});
+  if(!n)b+='<div class="empty">評価額を更新できる証券会社がありません。</div>';else b+=ERR+'<button class="btn pri">評価額を保存する</button>';
+  openSheet('AUMをまとめて更新',b+'</form>');
 }
 var CURS=['JPY','USD','EUR','GBP','AUD','NZD','CAD','CHF','CNY','HKD','TWD','KRW','SGD','THB','VND','INR','IDR','MYR','PHP','MXN','BRL','ZAR','TRY','SEK','NOK','DKK','PLN','AED','SAR'];
 function sheetCash(id){
@@ -663,7 +718,8 @@ function sheetStock(){
   if(S.cash.length){b+='<h2>現金預貯金</h2>';S.cash.forEach(function(c){n++;b+=fld(esc(c.name)+'（'+esc(c.cur)+'）　前回 '+ys(c.at),'f-c-'+c.id,c.amount,NUMA)})}
   var curs=fxCurs();
   if(curs.length){b+='<h2>為替レート（1通貨あたりの円）</h2>';curs.forEach(function(cur){n++;var f=S.fx[cur];b+=fld(esc(cur)+(f?'　前回 '+ys(f.at)+(f.src==='auto'?' 自動':' 手入力'):''),'f-fx-'+cur,f?f.rate:'',NUMA)})}
-  if(C.F.units>0&&!C.F.err){n++;b+='<h2>ファンド</h2>'+fld('評価額 AUM（円）　前回 '+ys(C.F.last),'f-aum',Math.round(C.F.aum),NUMA)}
+  var fs=C.FS.filter(function(x){return x.F.units>0&&!x.F.err});
+  if(fs.length){b+='<h2>ファンドの評価額 AUM（円）</h2>';fs.forEach(function(x){n++;b+=fld(esc(x.f.name)+'　前回 '+ys(x.F.last),'f-a-'+x.f.id,Math.round(x.F.aum),NUMA)})}
   if(S.debts.length){b+='<h2>負債の残高</h2>';S.debts.forEach(function(d){n++;b+=fld(esc(d.name)+'　前回 '+ys(d.at),'f-d-'+d.id,d.amount,NUMA)})}
   if(S.items.length){b+='<h2>備品の時価</h2>';S.items.forEach(function(i){n++;b+=fld(esc(i.name)+'　前回 '+ys(i.valueAt),'f-i-'+i.id,i.value||0,NUMA)})}
   if(!n)b+='<div class="empty">まとめて更新できる項目がまだありません。</div>';
@@ -673,7 +729,6 @@ function sheetStock(){
 function sheetSettings(){
   var lb=S.settings.lastBackup;
   var b='<h2>目標の純資産額</h2><form data-f="target">'+fld('目標額（円）。0で非表示','f-target',S.settings.target||'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>';
-  if(S.fund.ev.length)b+='<h2>ファンド名</h2><form data-f="fname">'+fld('ファンド名（空欄なら MY FUND）','f-name',S.fund.name||'','autocomplete="off"')+ERR+'<button class="btn pri">保存する</button></form>';
   b+='<h2>バックアップ</h2><p class="note">前回のバックアップ：'+(lb?ys(ymd(new Date(lb))):'まだありません')+'<br>データはこのiPhoneの中だけにあります。月に1回を目安に書き出し、共有メニューの「ファイルに保存」から iCloud Drive に置いてください。30日たつと総合画面でお知らせします。</p>'+
     '<button type="button" class="btn" data-a="export">バックアップを書き出す</button><div id="expbox" class="col" style="gap:10px" hidden><label class="fl" for="f-exp"><span>バックアップの中身（ファイル保存ができないときは、コピーしてメモ帳などに貼り付け）</span><textarea id="f-exp" readonly></textarea></label><button type="button" class="btn sec" data-a="copy">全文をコピーする</button></div>';
   if(rescueText())b+='<h2>退避データ</h2><p class="note">以前に読み込めなかった保存データが残っています。</p><button type="button" class="btn sec" data-a="exportRescue">退避したデータを書き出す</button>';
@@ -691,29 +746,43 @@ function withAum(evs,date,a){
 }
 var forms={
   fund:function(v){
-    var kind=v['f-kind'],e=v['f-id']?fundEvOf(v['f-id']):null,date=v['f-date']||today();
+    var fd=S.funds.find(function(f){return f.id===v['f-fund']});if(!fd)return '証券会社が見つかりません';
+    var kind=v['f-kind'],e=v['f-id']?fundEvOf(fd,v['f-id']):null,date=v['f-date']||today();
     if(v['f-id']&&!e)return '記録が見つかりません';
     if(['aum','in','out'].indexOf(kind)<0)return '種類を選んでください';
     var a=num(v['f-aum']),amt=0;
     if(kind!=='aum'){amt=num(v['f-amt']);if(!(amt>0))return bad(v,'f-amt',kind==='in'?'出資額':'払い戻し額')}
     if(kind==='aum'||v['f-show']==='1'){if(!(a>=0))return bad(v,'f-aum','評価額',1)}else a=0;
     var list;
-    if(e){var ne=Object.assign({},e,{date:date,aum:a,amount:amt});list=S.fund.ev.map(function(x){return x===e?ne:x})}
-    else list=kind==='aum'?withAum(S.fund.ev,date,a):S.fund.ev.concat([{id:uid(),date:date,kind:kind,amount:amt,aum:a}]);
+    if(e){var ne=Object.assign({},e,{date:date,aum:a,amount:amt});list=fd.ev.map(function(x){return x===e?ne:x})}
+    else list=kind==='aum'?withAum(fd.ev,date,a):fd.ev.concat([{id:uid(),date:date,kind:kind,amount:amt,aum:a}]);
     var err=fundCheck(list);if(err)return err;
-    S.fund.ev=list;ui.tab='sec';
+    fd.ev=list;ui.tab='sec';ui.fund=fd.id;
   },
   fundInit:function(v){
-    if(S.fund.ev.length)return 'ファンドはすでに設定されています';
-    var date=v['f-date']||today(),amt=num(v['f-amt']),now=blankStr(v['f-now'])?amt:num(v['f-now']);
+    var name=(v['f-name']||'').trim().slice(0,40),date=v['f-date']||today(),amt=num(v['f-amt']),now=blankStr(v['f-now'])?amt:num(v['f-now']);
+    if(!name)return '証券会社名を入力してください';
+    if(S.funds.some(function(f){return f.name===name}))return name+' はすでにあります';
     if(!(amt>0))return bad(v,'f-amt','最初の出資額');
     if(!(now>=0))return bad(v,'f-now','今の評価額',1);
     var list=[{id:uid(),date:date,kind:'in',amount:amt,aum:0}];
     if(date<today()||now!==amt)list.push({id:uid(),date:today(),kind:'aum',amount:0,aum:now});
     var err=fundCheck(list);if(err)return err;
-    S.fund.ev=list;S.fund.name=(v['f-name']||'').trim().slice(0,40);ui.tab='sec';
+    S.funds.push({id:uid(),name:name,ev:list});ui.tab='sec';ui.fund=null;
   },
-  fname:function(v){S.fund.name=(v['f-name']||'').trim().slice(0,40)},
+  fname:function(v){
+    var fd=S.funds.find(function(f){return f.id===v['f-fund']});if(!fd)return '証券会社が見つかりません';
+    var name=(v['f-name']||'').trim().slice(0,40);if(!name)return '証券会社名を入力してください';
+    if(S.funds.some(function(f){return f!==fd&&f.name===name}))return name+' はすでにあります';
+    fd.name=name;
+  },
+  aumAll:function(v){
+    var date=v['f-date']||today(),ops=[],err=null;
+    S.funds.forEach(function(fd){var k='f-a-'+fd.id;if(err||!(k in v)||!changed(v,k))return;
+      var a=num(v[k]);if(!(a>=0)){err=fd.name+' の評価額は0以上の数字で入力してください';return}
+      var L=withAum(fd.ev,date,a),e2=fundCheck(L);if(e2){err=fd.name+'：'+e2;return}ops.push(function(){fd.ev=L})});
+    if(err)return err;ops.forEach(function(f){f()});
+  },
   debt:function(v){
     var name=(v['f-name']||'').trim(),amt=num(v['f-amt']);
     if(!name)return '借入先・名前を入力してください';
@@ -760,7 +829,7 @@ var forms={
     var t=today(),ops=[],err=null,C=calc();
     S.cash.forEach(function(c){var k='f-c-'+c.id;if(err||!(k in v))return;var n=num(v[k]);if(!isFinite(n)){err=c.name+' の残高を数字で入力してください';return}ops.push(function(){c.amount=n;c.at=t})});
     fxCurs().forEach(function(cur){var k='f-fx-'+cur;if(err||!(k in v)||blankStr(v[k])||!changed(v,k))return;var r=num(v[k]);if(!(r>0)){err=cur+' のレートは0より大きい数で入力してください';return}ops.push(function(){S.fx[cur]={rate:r,at:t,src:'manual'}})});
-    if(!err&&('f-aum' in v)){var fa=num(v['f-aum']);if(!(fa>=0))err='ファンドの評価額は0以上の数字で入力してください';else{var fl=withAum(S.fund.ev,t,fa),fe=fundCheck(fl);if(fe)err=fe;else ops.push(function(){S.fund.ev=fl})}}
+    S.funds.forEach(function(fd){var k='f-a-'+fd.id;if(err||!(k in v))return;var fa=num(v[k]);if(!(fa>=0)){err=fd.name+' の評価額は0以上の数字で入力してください';return}var fl=withAum(fd.ev,t,fa),fe=fundCheck(fl);if(fe){err=fd.name+'：'+fe;return}ops.push(function(){fd.ev=fl})});
     S.debts.forEach(function(d){var k='f-d-'+d.id;if(err||!(k in v))return;var n=num(v[k]);if(!(n>=0)){err=d.name+' の残高は0以上の数字で入力してください';return}ops.push(function(){d.amount=n;d.at=t})});
     S.items.forEach(function(i){var k='f-i-'+i.id;if(err||!(k in v))return;var n=num(v[k]);if(!(n>=0)){err=i.name+' の時価は0以上で入力してください';return}ops.push(function(){i.value=n;i.valueAt=t})});
     if(err)return err;
@@ -791,7 +860,7 @@ function shareText(txt,name,ok){
 }
 function markBackup(msg){S.settings.lastBackup=Date.now();S.settings.snooze=null;save();render();toast(msg||'バックアップを保存しました')}
 var acts={
-  tab:function(d){ui.tab=d.k;render()},
+  tab:function(d){if(d.k==='sec'&&ui.tab==='sec')ui.fund=null;ui.tab=d.k;render()},
   range:function(d){ui.range=d.k;render()},
   hide:function(){S.settings.hide=!S.settings.hide;save();render()},
   settings:function(){sheetSettings()},
@@ -800,15 +869,22 @@ var acts={
   fund:function(d){sheetFund(d.k||'aum')},
   fev:function(d){sheetFund(null,d.id)},
   fundInit:function(){sheetFundInit()},
+  fopen:function(d){ui.tab='sec';ui.fund=d.id;render();$('#main').scrollTop=0},
+  fback:function(){ui.fund=null;render()},
+  fedit:function(){sheetFedit()},
+  aumAll:function(){sheetAumAll()},
+  delFund:function(d){S.funds=S.funds.filter(function(f){return f.id!==d.id});ui.fund=null;done('削除しました')},
   cash:function(d){sheetCash(d.id)},
   debt:function(d){sheetDebt(d.id)},
   item:function(d){sheetItem(d.id)},
   hist:function(d){sheetHist(d.id)},
   clearSample:function(){S=blank();ui.gen++;ui.msg='';done('サンプルを消しました。自分のデータを入力できます')},
   delFev:function(d){
-    var L=S.fund.ev.filter(function(x){return x.id!==d.id}),err=fundCheck(L);
+    var fd=curFund();if(!fd)return;
+    var L=fd.ev.filter(function(x){return x.id!==d.id}),err=fundCheck(L);
     if(err){toast('削除できません：'+err);return}
-    S.fund.ev=L;done('削除しました');
+    if(!L.length){toast('最後の記録は削除できません。証券会社ごと削除してください');return}
+    fd.ev=L;done('削除しました');
   },
   delDebt:function(d){S.debts=S.debts.filter(function(x){return x.id!==d.id});done('削除しました')},
   delCash:function(d){S.cash=S.cash.filter(function(x){return x.id!==d.id});done('削除しました')},
