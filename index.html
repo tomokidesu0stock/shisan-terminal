@@ -85,8 +85,8 @@ main>*{flex-shrink:0}
 .btn.pri{background:var(--amber);color:var(--ink)}
 .btn.dgr{border-color:var(--dn);color:var(--dn)}
 .btn.sec{border-color:var(--line);color:var(--fg);font-weight:400}
-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel)}
-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:0;border:0;background:none;color:var(--dim);font-size:13px}
+nav{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel)}
+nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:0;border:0;background:none;color:var(--dim);font-size:12px;white-space:nowrap}
 nav button small{font-size:10px}
 nav button[aria-current=page]{background:var(--amber);color:var(--ink);font-weight:700}
 svg.ch{display:block;width:100%;height:auto}
@@ -177,7 +177,7 @@ var stamp=function(ms){if(!ms)return '未取得';var d=new Date(ms);return (d.ge
 
 /* ---------- state ---------- */
 function defSet(o){return Object.assign({target:0,hide:false,lastBackup:null,snooze:null},o||{})}
-function blank(){return {v:1,sample:false,settings:defSet(),fund:{name:'',ev:[]},cash:[],fx:{},items:[],history:[],lastFetch:null}}
+function blank(){return {v:1,sample:false,settings:defSet(),fund:{name:'',ev:[]},cash:[],fx:{},items:[],debts:[],history:[],lastFetch:null}}
 function sample(){
   var s=blank(),t=today(),y=new Date().getFullYear();
   s.sample=true;s.settings.target=20000000;
@@ -192,7 +192,8 @@ function sample(){
   [['腕時計',1400,300000,280000,42],['ノートPC',950,250000,150000,12],['カメラ',1150,180000,120000,59],['自転車',520,120000,95678,217]].forEach(function(a){
     s.items.push({id:uid(),name:a[0],buyDate:ago(a[1]),buyPrice:a[2],value:a[3],valueAt:ago(a[4]),memo:''});
   });
-  var now=new Date(),tot=[11200000,11450000,11800000,11650000,12222222];
+  [['自動車ローン',1200000,6],['クレジットカード',85000,2]].forEach(function(a){s.debts.push({id:uid(),name:a[0],amount:a[1],at:ago(a[2])})});
+  var now=new Date(),tot=[9850000,10120000,10480000,10350000,10937222];
   for(var i=5;i>=1;i--){s.history.push({date:ymd(new Date(now.getFullYear(),now.getMonth()-i+1,0)),total:tot[5-i]})}
   return s;
 }
@@ -218,6 +219,7 @@ function normalize(o){
   }).filter(function(e){return e&&(e.kind==='aum'||e.amount>0)})};
   b.cash=arr(o.cash).map(function(c){var cur=String(c.cur||'JPY').toUpperCase();return {id:U(c.id),name:String(c.name||''),cur:/^[A-Z]{3}$/.test(cur)?cur:'JPY',amount:nz(c.amount),at:dt(c.at,t)}});
   b.items=arr(o.items).map(function(i){return {id:U(i.id),name:String(i.name||''),buyDate:dt(i.buyDate,'','1900-01-01'),buyPrice:nz(i.buyPrice),value:nz(i.value),valueAt:dt(i.valueAt,t),memo:String(i.memo||'')}});
+  b.debts=arr(o.debts).map(function(d){return {id:U(d.id),name:String(d.name||''),amount:Math.max(0,nz(d.amount)),at:dt(d.at,t)}});
   var seen={};
   b.history=arr(o.history).filter(function(h){if(dt(h.date,null)==null||h.date>t||seen[h.date])return false;seen[h.date]=1;return true})
     .map(function(h){var r={date:h.date,total:Math.round(nz(h.total))};if(h.manual)r.manual=true;return r})
@@ -261,7 +263,9 @@ function calc(){
   C.secTotal=C.F.aum;
   C.cashVal=sum(cash,function(x){return x.jpy});
   C.itemsVal=sum(S.items,function(i){return i.value||0});C.itemsCost=sum(S.items,function(i){return i.buyPrice||0});
-  C.total=C.secTotal+C.cashVal+C.itemsVal;
+  C.assets=C.secTotal+C.cashVal+C.itemsVal;
+  C.debtVal=sum(S.debts,function(d){return d.amount||0});
+  C.total=C.assets-C.debtVal;
   return C;
 }
 /* ファンド計算：出資・払い戻しのたびに、その直前の評価額で基準価額を決めて口数を発行・解約する（1口=1円で設定、表示は1万口あたり） */
@@ -325,7 +329,7 @@ async function fetchFX(g0){
   if(rates)curs.forEach(function(c){if(rates[c]>0){S.fx[c]={rate:Number((1/rates[c]).toPrecision(6)),at:today(),src:'auto'};ok++}});
   return {n:curs.length,ok:ok};
 }
-function hasData(){return !!(S.fund.ev.length||S.cash.length||S.items.length)}
+function hasData(){return !!(S.fund.ev.length||S.cash.length||S.items.length||S.debts.length)}
 function backupDue(){
   if((S.sample&&!S.sampleEdited)||!storageOK||!hasData())return false;
   var st=S.settings,now=Date.now();
@@ -366,7 +370,7 @@ function chart(recs){
     var dec=Math.max(0,Math.min(4,Math.ceil(-Math.log10(step/u)-1e-9)));
     return (v/u).toLocaleString('ja-JP',{maximumFractionDigits:dec})+{1e12:'兆',1e8:'億',1e4:'万'}[u];
   };
-  var o='<svg class="ch" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="総資産の推移グラフ">';
+  var o='<svg class="ch" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="純資産の推移グラフ">';
   for(var v=lo;v<=hi+step/2;v+=step){
     var y=Y(v).toFixed(1);
     o+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="'+(v===lo?'#5a5444':'#2a2720')+'" stroke-width="1"/>';
@@ -391,7 +395,7 @@ function chart(recs){
 }
 
 /* ---------- views ---------- */
-var TABS=[['sum','総合','1 総合 SUMMARY'],['sec','ファンド','2 ファンド FUND'],['cash','現預金','3 現預金 CASH'],['items','備品','4 備品 ITEMS'],['hist','推移','5 推移 HISTORY']];
+var TABS=[['sum','総合','1 総合 SUMMARY'],['sec','ファンド','2 ファンド FUND'],['cash','現預金','3 現預金 CASH'],['items','備品','4 備品 ITEMS'],['debt','負債','5 負債 LIABILITIES'],['hist','推移','6 推移 HISTORY']];
 function navStr(F){return F.units>0||F.last?f0(F.nav*10000):'—'}
 function aumAge(F){return F.last?Math.floor((new Date(today()+'T00:00:00')-new Date(F.last+'T00:00:00'))/864e5):0}
 
@@ -403,16 +407,17 @@ function viewSum(C){
   if(bk)o+='<div class="box att"><p>'+bk+'</p><p class="note">保存先は共有メニューの「ファイルに保存」→ iCloud Drive がおすすめです。</p><div class="btnrow"><button type="button" class="btn pri" data-a="export">今すぐ保存</button><button type="button" class="btn sec" data-a="snooze">あとで</button></div></div>';
   var prev=prevMonthRec(),chg='';
   if(prev){var d=Math.round(C.total-prev.total);chg='<div class="'+cls(d)+'">'+arrow(d)+sgn(d)+'　'+pct(prev.total?d/Math.abs(prev.total)*100:NaN)+'　<span class="dim">'+prevLabel(prev)+'</span></div>'}
-  o+='<section class="col"><div class="lb">総資産 TOTAL (JPY)</div><div class="big">'+yen(C.total)+'</div>'+chg+'</section>';
-  if(!hasData()&&!S.sample)o+='<div class="empty">まだ資産が登録されていません。<br>下のタブ「証券」「現預金」「備品」から追加すると、ここに合計・内訳・損益が表示されます。</div>';
+  o+='<section class="col"><div class="lb">純資産 NET WORTH (JPY)</div><div class="big">'+yen(C.total)+'</div>'+chg+'</section>';
+  o+='<div class="box"><div class="kv"><span>資産合計</span><span class="r">'+yen(C.assets)+'</span><span></span><span>負債合計</span><span class="r'+(C.debtVal>0?' dn':'')+'">'+(C.debtVal>0?'-'+yen(C.debtVal):yen(0))+'</span><span class="r dim">'+(C.assets>0&&C.debtVal>0?(Math.round(C.debtVal/C.assets*1000)/10).toFixed(1)+'%':'')+'</span></div></div>';
+  if(!hasData()&&!S.sample)o+='<div class="empty">まだ資産が登録されていません。<br>下のタブ「ファンド」「現預金」「備品」「負債」から追加すると、ここに合計・内訳が表示されます。</div>';
   var tg=S.settings.target;
   if(tg>0){
     var rate=C.total/tg*100,rest=tg-C.total;
     o+='<section class="box"><div class="row2"><span class="lb">目標 TARGET</span><span>'+yen(tg)+'</span></div><div class="meter"><i style="width:'+Math.max(0,Math.min(100,rate)).toFixed(1)+'%"></i></div><div class="row2"><span class="am">達成率 '+(isFinite(rate)?(Math.floor(rate*10)/10).toFixed(1):'0.0')+'%</span><span class="dim">'+(rest>0?'残り '+yen(rest):'達成')+'</span></div></section>';
-  }else o+='<button type="button" class="btn sec" data-a="settings">目標資産額を設定する</button>';
+  }else o+='<button type="button" class="btn sec" data-a="settings">目標の純資産額を設定する</button>';
   var parts=[['ファンド',C.secTotal,'var(--amber)'],['現金預貯金',C.cashVal,'var(--cy)'],['備品',C.itemsVal,'var(--gry)']];
   var pos=parts.reduce(function(a,p){return a+Math.max(0,p[1])},0),tot=parts.reduce(function(a,p){return a+p[1]},0);
-  o+='<section class="col" style="gap:8px"><div class="lb">内訳 ALLOCATION</div>';
+  o+='<section class="col" style="gap:8px"><div class="lb">資産の内訳 ALLOCATION</div>';
   if(pos>0)o+='<div class="alloc">'+parts.map(function(p){return p[1]>0?'<i style="flex:'+(p[1]/pos).toFixed(4)+';background:'+p[2]+'"></i>':''}).join('')+'</div>';
   o+='<div class="kv4">'+parts.map(function(p){return '<i class="sw" style="background:'+p[2]+'"></i><span>'+p[0]+'</span><span class="r">'+yen(p[1])+'</span><span class="r am">'+(tot>0?((Math.round(p[1]/tot*1000)/10)+0).toFixed(1)+'%':'—')+'</span>'}).join('')+'</div></section>';
   var F=C.F,fpl=F.aum-F.net;
@@ -497,16 +502,30 @@ function viewItems(C){
   return o;
 }
 
+function viewDebt(C){
+  var o='<section class="col"><span class="lb">負債 合計 (JPY)</span><span class="mid'+(C.debtVal>0?' dn':'')+'">'+yen(C.debtVal)+'</span>'+(C.assets>0&&C.debtVal>0?'<span class="note">資産合計に対して '+(Math.round(C.debtVal/C.assets*1000)/10).toFixed(1)+'%</span>':'')+'</section>';
+  if(!S.debts.length)o+='<div class="empty">負債はまだありません。<br>下の「＋ 負債を追加」から住宅ローン・自動車ローン・カードの未払い額などを登録してください。</div>';
+  else{
+    o+='<div class="list"><div class="gh"><span>借入先</span><span>残高</span></div>';
+    S.debts.slice().sort(function(a,b){return b.amount-a.amount}).forEach(function(d){
+      o+='<button type="button" class="it" data-a="debt" data-id="'+esc(d.id)+'"><span class="n">'+esc(d.name)+'</span><span></span><span class="pl">'+yen(d.amount)+'</span><span class="s">'+md(d.at)+' 更新</span></button>';
+    });
+    o+='</div><button type="button" class="btn sec" data-a="stock">まとめて更新（棚卸し）</button><div class="note">行をタップすると残高を書き換えられます。完済したら残高0にするか削除してください</div>';
+  }
+  o+='<div class="add"><button type="button" class="btn" data-a="debt" data-id="">＋ 負債を追加</button></div>';
+  return o;
+}
+
 function viewHist(C){
   var days={'6m':183,'1y':365,'3y':1096}[ui.range],from=days?ago(days):'0';
   var recs=S.history.filter(function(h){return h.date>=from});
-  var o='<div class="row2"><div class="col"><span class="lb">総資産 TOTAL (JPY)</span><span class="mid">'+yen(C.total)+'</span></div>';
+  var o='<div class="row2"><div class="col"><span class="lb">純資産 NET WORTH (JPY)</span><span class="mid">'+yen(C.total)+'</span></div>';
   if(recs.length&&recs[0].date<today()){var d=Math.round(C.total-recs[0].total),b=recs[0].total;o+='<div class="col e '+cls(d)+'"><span>'+arrow(d)+sgn(d)+'</span><span>期間 '+pct(b?d/Math.abs(b)*100:NaN)+'</span></div>'}
   o+='</div>';
   if(!recs.length)o+='<div class="empty">この期間の記録はまだありません。<br>資産を登録すると、アプリを開いた日に自動で記録されます。</div>';
   else{
     o+=chart(recs);
-    o+='<div class="list"><div class="gh c3 h"><span>記録日</span><span class="r">総資産</span><span class="r">前回比</span></div>';
+    o+='<div class="list"><div class="gh c3 h"><span>記録日</span><span class="r">純資産</span><span class="r">前回比</span></div>';
     for(var i=recs.length-1;i>=0;i--){
       var r=recs[i],idx=S.history.indexOf(r),p=idx>0?S.history[idx-1]:null,df=p?r.total-p.total:null;
       o+='<button type="button" class="it c3 h" data-a="hist" data-id="'+esc(r.date)+'"><span class="n"><span class="nw">'+ys(r.date)+'</span>'+(r.manual?' <span class="note">手修正</span>':'')+'</span><span class="r">'+yen(r.total)+'</span><span class="r '+(df==null?'dim':cls(df))+'">'+(df==null?'—':sgn(df))+'</span></button>';
@@ -531,7 +550,7 @@ function render(){
   var sub=$('#sub'),st=null;
   if(ui.tab==='hist')st=[['6m','6か月'],['1y','1年'],['3y','3年'],['all','全期間']].map(function(x){return '<button type="button" data-a="range" data-k="'+x[0]+'" aria-pressed="'+(ui.range===x[0])+'">'+x[1]+'</button>'});
   sub.hidden=!st;sub.innerHTML=st?st.join(''):'';
-  main.innerHTML={sum:viewSum,sec:viewSec,cash:viewCash,items:viewItems,hist:viewHist}[ui.tab](C);
+  main.innerHTML={sum:viewSum,sec:viewSec,cash:viewCash,items:viewItems,debt:viewDebt,hist:viewHist}[ui.tab](C);
   main.querySelectorAll('.big,.mid').forEach(function(el){el.style.setProperty('--n',Math.max(8,el.textContent.length))});
   main.dataset.tab=ui.tab+ui.secTab;main.scrollTop=keep;
   $('#nav').innerHTML=TABS.map(function(x,i){return '<button type="button" data-a="tab" data-k="'+x[0]+'"'+(x[0]===ui.tab?' aria-current="page"':'')+'><small>'+(i+1)+'</small><span>'+x[1]+'</span></button>'}).join('');
@@ -626,9 +645,15 @@ function sheetItem(id){
     fld('現在の時価（円）','f-value',i.value,NUMA)+(i.valueAt?'<p class="note">前回の時価更新 '+ys(i.valueAt)+'</p>':'')+fld('メモ（型番・保管場所など）','f-memo',i.memo||'','autocomplete="off"')+ERR+'<button class="btn pri">保存する</button></form>'+(i.id?delBtn('delItem',i.id,'この備品を削除する'):'');
   openSheet(i.id?'備品の修正':'備品を追加',b);
 }
+function sheetDebt(id){
+  var d=S.debts.find(function(x){return x.id===id})||{id:'',name:'',amount:''};
+  var b='<form data-f="debt"><input type="hidden" name="f-id" value="'+esc(d.id)+'">'+fld('借入先・名前（例 住宅ローン、クレジットカード）','f-name',d.name,'autocomplete="off"')+
+    fld('残高（円）','f-amt',d.amount,NUMA)+(d.at?'<p class="note">前回の更新 '+ys(d.at)+'</p>':'')+ERR+'<button class="btn pri">保存する</button></form>'+(d.id?delBtn('delDebt',d.id,'この負債を削除する'):'');
+  openSheet(d.id?'負債の修正':'負債を追加',b);
+}
 function sheetHist(date){
   var r=S.history.find(function(x){return x.date===date});
-  var b='<form data-f="hist"><input type="hidden" name="f-orig" value="'+esc(r?r.date:'')+'">'+dateF('記録日','f-date',r?r.date:ago(30))+fld('総資産（円）','f-total',r?r.total:'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>'+
+  var b='<form data-f="hist"><input type="hidden" name="f-orig" value="'+esc(r?r.date:'')+'">'+dateF('記録日','f-date',r?r.date:ago(30))+fld('純資産（円）','f-total',r?r.total:'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>'+
     (r&&r.manual&&r.date===today()?'<button type="button" class="btn" data-a="histAuto" data-id="'+esc(r.date)+'">今日の記録を自動計算に戻す</button>':'')+(r?delBtn('delHist',r.date,'この記録を削除する'):'');
   openSheet(r?'記録の修正':'過去の記録を追加',b);
 }
@@ -639,6 +664,7 @@ function sheetStock(){
   var curs=fxCurs();
   if(curs.length){b+='<h2>為替レート（1通貨あたりの円）</h2>';curs.forEach(function(cur){n++;var f=S.fx[cur];b+=fld(esc(cur)+(f?'　前回 '+ys(f.at)+(f.src==='auto'?' 自動':' 手入力'):''),'f-fx-'+cur,f?f.rate:'',NUMA)})}
   if(C.F.units>0&&!C.F.err){n++;b+='<h2>ファンド</h2>'+fld('評価額 AUM（円）　前回 '+ys(C.F.last),'f-aum',Math.round(C.F.aum),NUMA)}
+  if(S.debts.length){b+='<h2>負債の残高</h2>';S.debts.forEach(function(d){n++;b+=fld(esc(d.name)+'　前回 '+ys(d.at),'f-d-'+d.id,d.amount,NUMA)})}
   if(S.items.length){b+='<h2>備品の時価</h2>';S.items.forEach(function(i){n++;b+=fld(esc(i.name)+'　前回 '+ys(i.valueAt),'f-i-'+i.id,i.value||0,NUMA)})}
   if(!n)b+='<div class="empty">まとめて更新できる項目がまだありません。</div>';
   else b+=ERR+'<button class="btn pri">棚卸しを保存する</button>';
@@ -646,7 +672,7 @@ function sheetStock(){
 }
 function sheetSettings(){
   var lb=S.settings.lastBackup;
-  var b='<h2>目標資産額</h2><form data-f="target">'+fld('目標額（円）。0で非表示','f-target',S.settings.target||'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>';
+  var b='<h2>目標の純資産額</h2><form data-f="target">'+fld('目標額（円）。0で非表示','f-target',S.settings.target||'',NUMA)+ERR+'<button class="btn pri">保存する</button></form>';
   if(S.fund.ev.length)b+='<h2>ファンド名</h2><form data-f="fname">'+fld('ファンド名（空欄なら MY FUND）','f-name',S.fund.name||'','autocomplete="off"')+ERR+'<button class="btn pri">保存する</button></form>';
   b+='<h2>バックアップ</h2><p class="note">前回のバックアップ：'+(lb?ys(ymd(new Date(lb))):'まだありません')+'<br>データはこのiPhoneの中だけにあります。月に1回を目安に書き出し、共有メニューの「ファイルに保存」から iCloud Drive に置いてください。30日たつと総合画面でお知らせします。</p>'+
     '<button type="button" class="btn" data-a="export">バックアップを書き出す</button><div id="expbox" class="col" style="gap:10px" hidden><label class="fl" for="f-exp"><span>バックアップの中身（ファイル保存ができないときは、コピーしてメモ帳などに貼り付け）</span><textarea id="f-exp" readonly></textarea></label><button type="button" class="btn sec" data-a="copy">全文をコピーする</button></div>';
@@ -688,6 +714,13 @@ var forms={
     S.fund.ev=list;S.fund.name=(v['f-name']||'').trim().slice(0,40);ui.tab='sec';
   },
   fname:function(v){S.fund.name=(v['f-name']||'').trim().slice(0,40)},
+  debt:function(v){
+    var name=(v['f-name']||'').trim(),amt=num(v['f-amt']);
+    if(!name)return '借入先・名前を入力してください';
+    if(!(amt>=0))return bad(v,'f-amt','残高',1);
+    var d=S.debts.find(function(x){return x.id===v['f-id']});
+    if(d){d.name=name;if(d.amount!==amt)d.at=today();d.amount=amt}else S.debts.push({id:uid(),name:name,amount:amt,at:today()});
+  },
   cash:function(v){
     var name=(v['f-name']||'').trim(),amt=num(v['f-amt']),cur=String(v['f-cur']||'JPY');
     if(!name)return '口座名を入力してください';if(!isFinite(amt))return blankStr(v['f-amt'])?'残高を入力してください':'残高は数字で入力してください（例 1,000,000、100万）';
@@ -714,7 +747,7 @@ var forms={
   },
   hist:function(v){
     var date=v['f-date'],total=num(v['f-total']);
-    if(!date)return '記録日を入力してください';if(date>today())return '未来の日付は記録できません';if(!isFinite(total))return blankStr(v['f-total'])?'総資産を入力してください':'総資産は数字で入力してください（例 12,000,000、1200万）';
+    if(!date)return '記録日を入力してください';if(date>today())return '未来の日付は記録できません';if(!isFinite(total))return blankStr(v['f-total'])?'純資産を入力してください':'純資産は数字で入力してください（例 12,000,000、1200万。マイナスも可）';
     var orig=v['f-orig'];
     if(orig!==date&&S.history.some(function(h){return h.date===date}))return ys(date)+' の記録はすでにあります。一覧からその記録をタップして修正してください';
     if(orig&&orig!==date){S.history=S.history.filter(function(h){return h.date!==orig});if(orig===today())S.noRecord=today()}
@@ -728,6 +761,7 @@ var forms={
     S.cash.forEach(function(c){var k='f-c-'+c.id;if(err||!(k in v))return;var n=num(v[k]);if(!isFinite(n)){err=c.name+' の残高を数字で入力してください';return}ops.push(function(){c.amount=n;c.at=t})});
     fxCurs().forEach(function(cur){var k='f-fx-'+cur;if(err||!(k in v)||blankStr(v[k])||!changed(v,k))return;var r=num(v[k]);if(!(r>0)){err=cur+' のレートは0より大きい数で入力してください';return}ops.push(function(){S.fx[cur]={rate:r,at:t,src:'manual'}})});
     if(!err&&('f-aum' in v)){var fa=num(v['f-aum']);if(!(fa>=0))err='ファンドの評価額は0以上の数字で入力してください';else{var fl=withAum(S.fund.ev,t,fa),fe=fundCheck(fl);if(fe)err=fe;else ops.push(function(){S.fund.ev=fl})}}
+    S.debts.forEach(function(d){var k='f-d-'+d.id;if(err||!(k in v))return;var n=num(v[k]);if(!(n>=0)){err=d.name+' の残高は0以上の数字で入力してください';return}ops.push(function(){d.amount=n;d.at=t})});
     S.items.forEach(function(i){var k='f-i-'+i.id;if(err||!(k in v))return;var n=num(v[k]);if(!(n>=0)){err=i.name+' の時価は0以上で入力してください';return}ops.push(function(){i.value=n;i.valueAt=t})});
     if(err)return err;
     ops.forEach(function(f){f()});
@@ -767,6 +801,7 @@ var acts={
   fev:function(d){sheetFund(null,d.id)},
   fundInit:function(){sheetFundInit()},
   cash:function(d){sheetCash(d.id)},
+  debt:function(d){sheetDebt(d.id)},
   item:function(d){sheetItem(d.id)},
   hist:function(d){sheetHist(d.id)},
   clearSample:function(){S=blank();ui.gen++;ui.msg='';done('サンプルを消しました。自分のデータを入力できます')},
@@ -775,6 +810,7 @@ var acts={
     if(err){toast('削除できません：'+err);return}
     S.fund.ev=L;done('削除しました');
   },
+  delDebt:function(d){S.debts=S.debts.filter(function(x){return x.id!==d.id});done('削除しました')},
   delCash:function(d){S.cash=S.cash.filter(function(x){return x.id!==d.id});done('削除しました')},
   delItem:function(d){S.items=S.items.filter(function(x){return x.id!==d.id});done('削除しました')},
   delHist:function(d){if(d.id===today())S.noRecord=today();S.history=S.history.filter(function(x){return x.date!==d.id});done('削除しました')},
